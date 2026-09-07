@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { createService, type HabitReminder, type Task, type TaskNode } from "./api/service.ts";
+import { createServer } from "./server/server.ts";
 
 function dbPath(): string {
   return process.env["BTASK_DB"] ?? ".btask/btask.db";
@@ -64,6 +65,7 @@ btask status <id> <todo|in_progress|finished> [--human]
 btask complete <id> [--summary <text>] [--human]
 btask habit <id> <on|off> [--human]
 btask habits [--human] [--local] [--date YYYY-MM-DD]
+btask serve [--port <n>]
 btask context [--human]`;
 }
 
@@ -71,6 +73,7 @@ export function run(argv: string[]): void {
   const [cmd, ...rest] = argv;
   const human = hasFlag(rest, "--human");
   const svc = ensureService();
+  let leaveOpen = false;
   try {
     if (cmd === "list") {
       const tree = svc.list();
@@ -132,6 +135,13 @@ export function run(argv: string[]): void {
         if (human) console.log(renderRemindersHuman(reminders).join("\n"));
         else console.log(JSON.stringify(reminders, null, 2));
       }
+    } else if (cmd === "serve") {
+      const port = Number(flagValue(rest, "--port") ?? process.env["BTASK_PORT"] ?? 3000);
+      if (!Number.isInteger(port) || port < 0) throw new Error(usage());
+      const srv = createServer(svc, { port });
+      console.log(`listening on ${srv.url}`);
+      leaveOpen = true;
+      return;
     } else if (cmd === "context") {
       const tasks = svc.context();
       if (human) console.log(renderContextHuman(tasks).join("\n"));
@@ -147,7 +157,7 @@ export function run(argv: string[]): void {
       throw new Error(usage());
     }
   } finally {
-    svc.close();
+    if (!leaveOpen) svc.close();
   }
 }
 

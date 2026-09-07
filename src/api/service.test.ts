@@ -161,4 +161,37 @@ describe("task service", () => {
     });
     expect(() => svc.habitReminders("2026-09-07")).toThrow("habitui");
   });
+
+  test("emits one change event per mutation", () => {
+    const events: Array<{ action: string; id: string }> = [];
+    const svc = createService(":memory:", { onEvent: (e) => events.push(e) });
+    const goal = svc.create({ title: "Ship" });
+    svc.setStatus(goal.id, "in_progress");
+    svc.update(goal.id, { notes: "n" });
+    svc.setHabit(goal.id, true);
+    const sub = svc.create({ title: "Store", parentId: goal.id });
+    svc.remove(sub.id);
+    svc.complete(goal.id, "done");
+    expect(events).toEqual([
+      { action: "created", id: goal.id },
+      { action: "status", id: goal.id },
+      { action: "updated", id: goal.id },
+      { action: "habit", id: goal.id },
+      { action: "created", id: sub.id },
+      { action: "removed", id: sub.id },
+      { action: "completed", id: goal.id },
+    ]);
+  });
+
+  test("emits no events on reads", () => {
+    const events: unknown[] = [];
+    const svc = createService(":memory:", { onEvent: (e) => events.push(e) });
+    const goal = svc.create({ title: "Ship" });
+    events.length = 0;
+    svc.get(goal.id);
+    svc.list();
+    svc.context();
+    svc.habits();
+    expect(events).toEqual([]);
+  });
 });

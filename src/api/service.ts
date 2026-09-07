@@ -14,10 +14,14 @@ export type CreateArgs = { title: string; notes?: string; parentId?: string; hab
 
 export type UpdateArgs = { title?: string; notes?: string };
 
+export type TaskEventAction = "created" | "updated" | "status" | "removed" | "completed" | "habit";
+export type TaskEvent = { action: TaskEventAction; id: string };
+
 export type ServiceOptions = {
   artifactDir?: string;
   now?: () => number;
   habitSummary?: SummaryRunner;
+  onEvent?: (event: TaskEvent) => void;
 };
 
 export type Service = {
@@ -31,6 +35,7 @@ export type Service = {
   setHabit: (id: string, habit: boolean) => Task;
   habits: () => Task[];
   habitReminders: (date?: string) => HabitReminder[];
+  subscribe: (listener: (event: TaskEvent) => void) => () => void;
   context: () => Task[];
   close: () => void;
 };
@@ -41,6 +46,12 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
   const store = openStore(path);
   const artifactDir = options.artifactDir ?? "artifacts";
   const now = options.now ?? Date.now;
+  const listeners = new Set<(event: TaskEvent) => void>();
+  if (options.onEvent) listeners.add(options.onEvent);
+  const emit = (action: TaskEventAction, id: string): void => {
+    const event = { action, id };
+    for (const listener of listeners) listener(event);
+  };
   function collectSubtree(rootId: string): string[] {
     const found: string[] = [];
     const queue = [rootId];
@@ -55,6 +66,10 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
     }
     return found;
   }
+  const created = (task: Task): Task => {
+    emit("created", task.id);
+    return task;
+  };
   return {
     create(args) {
       const title = args.title.trim();
@@ -63,14 +78,16 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
         const parent = store.get(args.parentId);
         if (!parent) throw new Error(`parent not found: ${args.parentId}`);
       }
-      return store.create({
-        id: crypto.randomUUID(),
-        title,
-        notes: args.notes ?? "",
-        parentId: args.parentId,
-        habit: args.habit,
-        createdAt: Date.now(),
-      });
+      return created(
+        store.create({
+          id: crypto.randomUUID(),
+          title,
+          notes: args.notes ?? "",
+          parentId: args.parentId,
+          habit: args.habit,
+          createdAt: Date.now(),
+        })
+      );
     },
     get(id) {
       return store.get(id);
@@ -95,23 +112,28 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
       if (!VALID.has(status)) throw new Error(`invalid status: ${status}`);
       const existing = store.get(id);
       if (!existing) throw new Error(`task not found: ${id}`);
-      return store.setStatus(id, status) as Task;
+      const next = store.setStatus(id, status) as Task;
+      emit("status", id);
+      return next;
     },
     update(id, patch) {
       const existing = store.get(id);
       if (!existing) throw new Error(`task not found: ${id}`);
       const title = patch.title === undefined ? existing.title : patch.title.trim();
       if (!title) throw new Error("title is required");
-      return store.update(id, {
+      const next = store.update(id, {
         title,
         notes: patch.notes === undefined ? existing.notes : patch.notes,
       }) as Task;
+      emit("updated", id);
+      return next;
     },
     remove(id) {
       const existing = store.get(id);
       if (!existing) throw new Error(`task not found: ${id}`);
       store.remove(id);
       for (const target of collectSubtree(id)) store.remove(target);
+      emit("removed", id);
     },
     complete(id, summary) {
       const goal = store.get(id);
@@ -121,6 +143,7 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
       const finished = store.setStatus(id, "finished") as Task;
       writeArtifact({ dir: artifactDir, goal: finished, subtasks, summary, now: now() });
       for (const target of subtree) store.remove(target);
+      emit("completed", id);
       return finished;
     },
     context() {
@@ -129,13 +152,21 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
     setHabit(id, habit) {
       const existing = store.get(id);
       if (!existing) throw new Error(`task not found: ${id}`);
-      return store.setHabit(id, habit) as Task;
+      const next = store.setHabit(id, habit) as Task;
+      emit("habit", id);
+      return next;
     },
     habits() {
       return store.listAll().filter((t) => t.habit && t.status !== "finished");
     },
     habitReminders(date = todayLocal()) {
       return incompleteReminders(date, options.habitSummary);
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     },
     close() {
       store.close();
