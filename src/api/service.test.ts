@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createService } from "./service.ts";
 
 describe("task service", () => {
@@ -60,5 +63,43 @@ describe("task service", () => {
     const ctx = svc.context();
     expect(ctx.map((t) => t.id).sort()).toEqual([goal.id, sub.id].sort());
     expect(ctx.find((t) => t.id === sub.id)?.parentId).toBe(goal.id);
+  });
+
+  test("completes a goal with open sub-tasks, writes artifact, wipes subs", () => {
+    const dir = mkdtempSync(join(tmpdir(), "btask-art-"));
+    const svc = createService(":memory:", {
+      artifactDir: dir,
+      now: () => new Date("2026-09-07T12:00:00Z").getTime(),
+    });
+    const goal = svc.create({ title: "Ship btask" });
+    const done = svc.create({ title: "Write store", parentId: goal.id });
+    const open = svc.create({ title: "Write CLI", parentId: goal.id });
+    svc.setStatus(done.id, "finished");
+    const completed = svc.complete(goal.id, "Shipped v1");
+    expect(completed.status).toBe("finished");
+    const tree = svc.list();
+    expect(tree.map((n) => n.task.id)).toEqual([goal.id]);
+    expect(tree[0]?.children).toEqual([]);
+    const files = readdirSync(dir);
+    expect(files.length).toBe(1);
+    expect(files[0]).toMatch(/^2026-09-07-ship-btask-[0-9a-f-]+\.md$/);
+    const body = readFileSync(join(dir, files[0] as string), "utf8");
+    expect(body).toContain(`goal: ${goal.id}`);
+    expect(body).toContain("Ship btask");
+    expect(body).toContain("Write store");
+    expect(body).toContain("Write CLI");
+    expect(body).toContain("Shipped v1");
+    expect(svc.get(open.id)).toBeNull();
+  });
+
+  test("completes without a summary and throws on missing id", () => {
+    const dir = mkdtempSync(join(tmpdir(), "btask-art-"));
+    const svc = createService(":memory:", { artifactDir: dir });
+    const goal = svc.create({ title: "Exercise" });
+    svc.create({ title: "Stretch", parentId: goal.id });
+    const completed = svc.complete(goal.id);
+    expect(completed.status).toBe("finished");
+    expect(readdirSync(dir).length).toBe(1);
+    expect(() => svc.complete("nope")).toThrow();
   });
 });

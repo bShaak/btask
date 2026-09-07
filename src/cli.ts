@@ -9,7 +9,7 @@ function dbPath(): string {
 function ensureService() {
   const path = dbPath();
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-  return createService(path);
+  return createService(path, { artifactDir: process.env["BTASK_ARTIFACTS"] ?? "artifacts" });
 }
 
 function hasFlag(args: string[], ...names: string[]): boolean {
@@ -57,6 +57,7 @@ btask create <title> [--parent <id>] [--notes <text>] [--human]
 btask update <id> [--title <text>] [--notes <text>] [--human]
 btask delete <id>
 btask status <id> <todo|in_progress|finished> [--human]
+btask complete <id> [--summary <text>] [--human]
 btask context [--human]`;
 }
 
@@ -101,6 +102,12 @@ export function run(argv: string[]): void {
       svc.remove(id);
       if (human) console.log(`deleted ${id.slice(0, 8)}`);
       else console.log(JSON.stringify({ deleted: id }));
+    } else if (cmd === "complete") {
+      const [id] = rest.filter((a) => !a.startsWith("-"));
+      if (!id) throw new Error(usage());
+      const task = svc.complete(id, flagValue(rest, "--summary"));
+      if (human) console.log(`[x] ${task.title} (${task.id.slice(0, 8)})`);
+      else console.log(JSON.stringify(task, null, 2));
     } else if (cmd === "context") {
       const tasks = svc.context();
       if (human) console.log(renderContextHuman(tasks).join("\n"));

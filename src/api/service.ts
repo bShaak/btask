@@ -1,10 +1,16 @@
 import { openStore, type Status, type Task } from "../lib/tasks.ts";
+import { writeArtifact } from "../lib/artifacts.ts";
 
 export type { Status, Task };
 export type TaskNode = { task: Task; children: TaskNode[] };
 export type CreateArgs = { title: string; notes?: string; parentId?: string; habit?: boolean };
 
 export type UpdateArgs = { title?: string; notes?: string };
+
+export type ServiceOptions = {
+  artifactDir?: string;
+  now?: () => number;
+};
 
 export type Service = {
   create: (args: CreateArgs) => Task;
@@ -13,14 +19,31 @@ export type Service = {
   setStatus: (id: string, status: Status) => Task;
   update: (id: string, patch: UpdateArgs) => Task;
   remove: (id: string) => void;
+  complete: (id: string, summary?: string) => Task;
   context: () => Task[];
   close: () => void;
 };
 
 const VALID: ReadonlySet<string> = new Set(["todo", "in_progress", "finished"]);
 
-export function createService(path: string): Service {
+export function createService(path: string, options: ServiceOptions = {}): Service {
   const store = openStore(path);
+  const artifactDir = options.artifactDir ?? "artifacts";
+  const now = options.now ?? Date.now;
+  function collectSubtree(rootId: string): string[] {
+    const found: string[] = [];
+    const queue = [rootId];
+    while (queue.length > 0) {
+      const current = queue.pop() as string;
+      for (const t of store.listAll()) {
+        if (t.parentId === current) {
+          found.push(t.id);
+          queue.push(t.id);
+        }
+      }
+    }
+    return found;
+  }
   return {
     create(args) {
       const title = args.title.trim();
@@ -76,14 +99,18 @@ export function createService(path: string): Service {
     remove(id) {
       const existing = store.get(id);
       if (!existing) throw new Error(`task not found: ${id}`);
-      const ids = [id];
-      for (let i = 0; i < ids.length; i++) {
-        const current = ids[i] as string;
-        for (const t of store.listAll()) {
-          if (t.parentId === current) ids.push(t.id);
-        }
-      }
-      for (const target of ids) store.remove(target);
+      store.remove(id);
+      for (const target of collectSubtree(id)) store.remove(target);
+    },
+    complete(id, summary) {
+      const goal = store.get(id);
+      if (!goal) throw new Error(`task not found: ${id}`);
+      const subtree = collectSubtree(id);
+      const subtasks = store.listAll().filter((t) => subtree.includes(t.id));
+      const finished = store.setStatus(id, "finished") as Task;
+      writeArtifact({ dir: artifactDir, goal: finished, subtasks, summary, now: now() });
+      for (const target of subtree) store.remove(target);
+      return finished;
     },
     context() {
       return store.listAll();

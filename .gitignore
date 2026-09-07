@@ -35,3 +35,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # local task database (user state, not shared)
 .btask/
+
+# completion summary artifacts (user state, not shared)
+artifacts/
