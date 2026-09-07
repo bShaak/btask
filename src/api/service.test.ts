@@ -102,4 +102,25 @@ describe("task service", () => {
     expect(readdirSync(dir).length).toBe(1);
     expect(() => svc.complete("nope")).toThrow();
   });
+
+  test("lists only incomplete habit tasks", () => {
+    const svc = createService(":memory:");
+    const run = svc.create({ title: "Exercise", habit: true });
+    svc.create({ title: "Ship btask" });
+    const read = svc.create({ title: "Read", habit: true });
+    svc.setStatus(read.id, "finished");
+    const habits = svc.habits();
+    expect(habits.map((t) => t.id)).toEqual([run.id]);
+  });
+
+  test("toggles the habit marker and throws on missing id", () => {
+    const svc = createService(":memory:");
+    const goal = svc.create({ title: "Stretch" });
+    expect(svc.habits()).toEqual([]);
+    expect(svc.setHabit(goal.id, true).habit).toBe(true);
+    expect(svc.habits().map((t) => t.id)).toEqual([goal.id]);
+    expect(svc.setHabit(goal.id, false).habit).toBe(false);
+    expect(svc.habits()).toEqual([]);
+    expect(() => svc.setHabit("nope", true)).toThrow();
+  });
 });

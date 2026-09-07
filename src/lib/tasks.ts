@@ -25,6 +25,7 @@ export type TaskStore = {
   listAll: () => Task[];
   setStatus: (id: string, status: Status) => Task | null;
   update: (id: string, patch: { title: string; notes: string }) => Task | null;
+  setHabit: (id: string, habit: boolean) => Task | null;
   remove: (id: string) => void;
   close: () => void;
 };
@@ -52,6 +53,7 @@ export function openStore(path: string): TaskStore {
   const all = db.prepare(`SELECT * FROM tasks ORDER BY rowid ASC`);
   const updateStatus = db.prepare(`UPDATE tasks SET status = ? WHERE id = ?`);
   const updateFields = db.prepare(`UPDATE tasks SET title = ?, notes = ? WHERE id = ?`);
+  const updateHabit = db.prepare(`UPDATE tasks SET habit = ? WHERE id = ?`);
   const deleteById = db.prepare(`DELETE FROM tasks WHERE id = ?`);
 
   function rowToTask(row: Record<string, unknown>): Task {
@@ -93,6 +95,10 @@ export function openStore(path: string): TaskStore {
     },
     update(id, patch) {
       updateFields.run(patch.title, patch.notes, id);
+      return this.get(id);
+    },
+    setHabit(id, habit) {
+      updateHabit.run(habit ? 1 : 0, id);
       return this.get(id);
     },
     remove(id) {

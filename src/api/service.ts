@@ -20,6 +20,8 @@ export type Service = {
   update: (id: string, patch: UpdateArgs) => Task;
   remove: (id: string) => void;
   complete: (id: string, summary?: string) => Task;
+  setHabit: (id: string, habit: boolean) => Task;
+  habits: () => Task[];
   context: () => Task[];
   close: () => void;
 };
@@ -114,6 +116,14 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
     },
     context() {
       return store.listAll();
+    },
+    setHabit(id, habit) {
+      const existing = store.get(id);
+      if (!existing) throw new Error(`task not found: ${id}`);
+      return store.setHabit(id, habit) as Task;
+    },
+    habits() {
+      return store.listAll().filter((t) => t.habit && t.status !== "finished");
     },
     close() {
       store.close();

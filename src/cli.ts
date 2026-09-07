@@ -53,11 +53,13 @@ function renderContextHuman(tasks: Task[]): string[] {
 function usage(): string {
   return `btask list [--human]
 btask get <id> [--human]
-btask create <title> [--parent <id>] [--notes <text>] [--human]
+btask create <title> [--parent <id>] [--notes <text>] [--habit] [--human]
 btask update <id> [--title <text>] [--notes <text>] [--human]
 btask delete <id>
 btask status <id> <todo|in_progress|finished> [--human]
 btask complete <id> [--summary <text>] [--human]
+btask habit <id> <on|off> [--human]
+btask habits [--human]
 btask context [--human]`;
 }
 
@@ -84,6 +86,7 @@ export function run(argv: string[]): void {
         title,
         parentId: flagValue(rest, "--parent"),
         notes: flagValue(rest, "--notes"),
+        habit: hasFlag(rest, "--habit"),
       });
       if (human) console.log(`[ ] ${task.title} (${task.id.slice(0, 8)})`);
       else console.log(JSON.stringify(task, null, 2));
@@ -108,6 +111,17 @@ export function run(argv: string[]): void {
       const task = svc.complete(id, flagValue(rest, "--summary"));
       if (human) console.log(`[x] ${task.title} (${task.id.slice(0, 8)})`);
       else console.log(JSON.stringify(task, null, 2));
+    } else if (cmd === "habit") {
+      const positional = rest.filter((a) => !a.startsWith("-"));
+      const [id, value] = positional;
+      if (!id || (value !== "on" && value !== "off")) throw new Error(usage());
+      const task = svc.setHabit(id, value === "on");
+      if (human) console.log(renderTaskHuman(task));
+      else console.log(JSON.stringify(task, null, 2));
+    } else if (cmd === "habits") {
+      const tasks = svc.habits();
+      if (human) console.log(renderContextHuman(tasks).join("\n"));
+      else console.log(JSON.stringify(tasks, null, 2));
     } else if (cmd === "context") {
       const tasks = svc.context();
       if (human) console.log(renderContextHuman(tasks).join("\n"));
