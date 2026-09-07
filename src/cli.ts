@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { createService, type Task, type TaskNode } from "./api/service.ts";
+import { createService, type HabitReminder, type Task, type TaskNode } from "./api/service.ts";
 
 function dbPath(): string {
   return process.env["BTASK_DB"] ?? ".btask/btask.db";
@@ -43,6 +43,10 @@ function renderTaskHuman(task: Task): string {
   return `${mark} ${task.title} (${task.id.slice(0, 8)}) [${task.status}]${notes}`;
 }
 
+function renderRemindersHuman(reminders: HabitReminder[]): string[] {
+  return reminders.map((r) => `${r.title} (${r.completionCount}/${r.goal} today)`);
+}
+
 function renderContextHuman(tasks: Task[]): string[] {
   return tasks.map((t) => {
     const parent = t.parentId ? ` parent=${t.parentId.slice(0, 8)}` : "";
@@ -59,7 +63,7 @@ btask delete <id>
 btask status <id> <todo|in_progress|finished> [--human]
 btask complete <id> [--summary <text>] [--human]
 btask habit <id> <on|off> [--human]
-btask habits [--human]
+btask habits [--human] [--local] [--date YYYY-MM-DD]
 btask context [--human]`;
 }
 
@@ -119,9 +123,15 @@ export function run(argv: string[]): void {
       if (human) console.log(renderTaskHuman(task));
       else console.log(JSON.stringify(task, null, 2));
     } else if (cmd === "habits") {
-      const tasks = svc.habits();
-      if (human) console.log(renderContextHuman(tasks).join("\n"));
-      else console.log(JSON.stringify(tasks, null, 2));
+      if (hasFlag(rest, "--local")) {
+        const tasks = svc.habits();
+        if (human) console.log(renderContextHuman(tasks).join("\n"));
+        else console.log(JSON.stringify(tasks, null, 2));
+      } else {
+        const reminders = svc.habitReminders(flagValue(rest, "--date"));
+        if (human) console.log(renderRemindersHuman(reminders).join("\n"));
+        else console.log(JSON.stringify(reminders, null, 2));
+      }
     } else if (cmd === "context") {
       const tasks = svc.context();
       if (human) console.log(renderContextHuman(tasks).join("\n"));

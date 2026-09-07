@@ -1,6 +1,13 @@
 import { openStore, type Status, type Task } from "../lib/tasks.ts";
 import { writeArtifact } from "../lib/artifacts.ts";
+import {
+  incompleteReminders,
+  todayLocal,
+  type HabitReminder,
+  type SummaryRunner,
+} from "../lib/habitui.ts";
 
+export type { HabitReminder };
 export type { Status, Task };
 export type TaskNode = { task: Task; children: TaskNode[] };
 export type CreateArgs = { title: string; notes?: string; parentId?: string; habit?: boolean };
@@ -10,6 +17,7 @@ export type UpdateArgs = { title?: string; notes?: string };
 export type ServiceOptions = {
   artifactDir?: string;
   now?: () => number;
+  habitSummary?: SummaryRunner;
 };
 
 export type Service = {
@@ -22,6 +30,7 @@ export type Service = {
   complete: (id: string, summary?: string) => Task;
   setHabit: (id: string, habit: boolean) => Task;
   habits: () => Task[];
+  habitReminders: (date?: string) => HabitReminder[];
   context: () => Task[];
   close: () => void;
 };
@@ -124,6 +133,9 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
     },
     habits() {
       return store.listAll().filter((t) => t.habit && t.status !== "finished");
+    },
+    habitReminders(date = todayLocal()) {
+      return incompleteReminders(date, options.habitSummary);
     },
     close() {
       store.close();

@@ -43,7 +43,7 @@ A `btask` system with deep library modules behind a small service interface, one
 - No new seams beyond the service seam for v1; storage, clock, and artifact-sink are internal seams private to the module implementations, swappable via in-memory fakes in tests.
 - Status model is exactly todo, in progress, finished; completion of a parent triggers artifact write then sub-task wipe as one atomic behavior owned by the service, not the UI.
 - Agent context is a read of the current hierarchy plus parent identifiers, so sub-task creation always carries a parent link.
-- Habit reminders are a query over the same task model (habit-marked tasks incomplete for the day), not a separate subsystem.
+- Habit reminders delegate to habitui (the system of record for streaks, schedules, goals) via its `cli list --json` automation surface; btask habit flags remain as local markers, and `habits --local` keeps the same-model query as a fallback.
 - Adapter layering: library modules → API layer → CLI / HTTP server / WebSocket interface → TUI first; native desktop/mobile/web are future adapters reusing the same API seam.
 - Runtime is Bun with TypeScript strict mode; persistence starts as local file-backed storage swappable behind the internal storage seam.
 

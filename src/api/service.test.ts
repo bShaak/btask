@@ -123,4 +123,42 @@ describe("task service", () => {
     expect(svc.habits()).toEqual([]);
     expect(() => svc.setHabit("nope", true)).toThrow();
   });
+
+  test("pulls incomplete reminders from habitui", () => {
+    const seen: string[] = [];
+    const svc = createService(":memory:", {
+      habitSummary: (date) => {
+        seen.push(date);
+        return JSON.stringify({
+          date,
+          habits: [
+            { id: 1, name: "Exercise", goal: 1, due: true, complete: false, completion_count: 0 },
+            { id: 2, name: "Read", goal: 2, due: true, complete: true, completion_count: 2 },
+            { id: 3, name: "Someday", goal: 1, due: false, complete: false, completion_count: 0 },
+          ],
+        });
+      },
+    });
+    const reminders = svc.habitReminders("2026-09-07");
+    expect(seen).toEqual(["2026-09-07"]);
+    expect(reminders).toEqual([
+      {
+        source: "habitui",
+        id: "1",
+        title: "Exercise",
+        goal: 1,
+        completionCount: 0,
+        date: "2026-09-07",
+      },
+    ]);
+  });
+
+  test("propagates habitui runner failures", () => {
+    const svc = createService(":memory:", {
+      habitSummary: () => {
+        throw new Error("habitui not found");
+      },
+    });
+    expect(() => svc.habitReminders("2026-09-07")).toThrow("habitui");
+  });
 });
