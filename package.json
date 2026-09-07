@@ -5,7 +5,9 @@
   "private": true,
   "scripts": {
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "tui": "bun run src/tui/app.ts",
+    "btask": "bun run src/cli.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"
