@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { createService, type TaskNode } from "./api/service.ts";
+import { createService, type Task, type TaskNode } from "./api/service.ts";
 
 function dbPath(): string {
   return process.env["BTASK_DB"] ?? ".btask/btask.db";
@@ -37,10 +37,27 @@ function renderHuman(nodes: TaskNode[], depth = 0): string[] {
   return lines;
 }
 
+function renderTaskHuman(task: Task): string {
+  const mark = task.status === "finished" ? "[x]" : task.status === "in_progress" ? "[~]" : "[ ]";
+  const notes = task.notes ? `\n  notes: ${task.notes}` : "";
+  return `${mark} ${task.title} (${task.id.slice(0, 8)}) [${task.status}]${notes}`;
+}
+
+function renderContextHuman(tasks: Task[]): string[] {
+  return tasks.map((t) => {
+    const parent = t.parentId ? ` parent=${t.parentId.slice(0, 8)}` : "";
+    return `${t.id.slice(0, 8)} [${t.status}] ${t.title}${parent}`;
+  });
+}
+
 function usage(): string {
   return `btask list [--human]
+btask get <id> [--human]
 btask create <title> [--parent <id>] [--notes <text>] [--human]
-btask status <id> <todo|in_progress|finished> [--human]`;
+btask update <id> [--title <text>] [--notes <text>] [--human]
+btask delete <id>
+btask status <id> <todo|in_progress|finished> [--human]
+btask context [--human]`;
 }
 
 export function run(argv: string[]): void {
@@ -52,6 +69,13 @@ export function run(argv: string[]): void {
       const tree = svc.list();
       if (human) console.log(renderHuman(tree).join("\n"));
       else console.log(JSON.stringify(tree, null, 2));
+    } else if (cmd === "get") {
+      const [id] = rest.filter((a) => !a.startsWith("-"));
+      if (!id) throw new Error(usage());
+      const task = svc.get(id);
+      if (!task) throw new Error(`task not found: ${id}`);
+      if (human) console.log(renderTaskHuman(task));
+      else console.log(JSON.stringify(task, null, 2));
     } else if (cmd === "create") {
       const title = rest.find((a) => !a.startsWith("-"));
       if (!title) throw new Error(usage());
@@ -62,6 +86,25 @@ export function run(argv: string[]): void {
       });
       if (human) console.log(`[ ] ${task.title} (${task.id.slice(0, 8)})`);
       else console.log(JSON.stringify(task, null, 2));
+    } else if (cmd === "update") {
+      const [id] = rest.filter((a) => !a.startsWith("-"));
+      if (!id) throw new Error(usage());
+      const task = svc.update(id, {
+        title: flagValue(rest, "--title"),
+        notes: flagValue(rest, "--notes"),
+      });
+      if (human) console.log(renderTaskHuman(task));
+      else console.log(JSON.stringify(task, null, 2));
+    } else if (cmd === "delete") {
+      const [id] = rest.filter((a) => !a.startsWith("-"));
+      if (!id) throw new Error(usage());
+      svc.remove(id);
+      if (human) console.log(`deleted ${id.slice(0, 8)}`);
+      else console.log(JSON.stringify({ deleted: id }));
+    } else if (cmd === "context") {
+      const tasks = svc.context();
+      if (human) console.log(renderContextHuman(tasks).join("\n"));
+      else console.log(JSON.stringify(tasks, null, 2));
     } else if (cmd === "status") {
       const positional = rest.filter((a) => !a.startsWith("-"));
       const [id, status] = positional;

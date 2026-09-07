@@ -4,11 +4,16 @@ export type { Status, Task };
 export type TaskNode = { task: Task; children: TaskNode[] };
 export type CreateArgs = { title: string; notes?: string; parentId?: string; habit?: boolean };
 
+export type UpdateArgs = { title?: string; notes?: string };
+
 export type Service = {
   create: (args: CreateArgs) => Task;
   get: (id: string) => Task | null;
   list: () => TaskNode[];
   setStatus: (id: string, status: Status) => Task;
+  update: (id: string, patch: UpdateArgs) => Task;
+  remove: (id: string) => void;
+  context: () => Task[];
   close: () => void;
 };
 
@@ -57,6 +62,31 @@ export function createService(path: string): Service {
       const existing = store.get(id);
       if (!existing) throw new Error(`task not found: ${id}`);
       return store.setStatus(id, status) as Task;
+    },
+    update(id, patch) {
+      const existing = store.get(id);
+      if (!existing) throw new Error(`task not found: ${id}`);
+      const title = patch.title === undefined ? existing.title : patch.title.trim();
+      if (!title) throw new Error("title is required");
+      return store.update(id, {
+        title,
+        notes: patch.notes === undefined ? existing.notes : patch.notes,
+      }) as Task;
+    },
+    remove(id) {
+      const existing = store.get(id);
+      if (!existing) throw new Error(`task not found: ${id}`);
+      const ids = [id];
+      for (let i = 0; i < ids.length; i++) {
+        const current = ids[i] as string;
+        for (const t of store.listAll()) {
+          if (t.parentId === current) ids.push(t.id);
+        }
+      }
+      for (const target of ids) store.remove(target);
+    },
+    context() {
+      return store.listAll();
     },
     close() {
       store.close();
