@@ -86,6 +86,8 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
           return json(service.habitReminders(url.searchParams.get("date") ?? undefined));
         } else if (route[0] === "habits" && route.length === 2 && route[1] === "local" && req.method === "GET") {
           return json(service.habits());
+        } else if (route[0] === "habits" && route.length === 2 && route[1] === "completions") {
+          if (req.method === "POST") return pushCompletion(req);
         }
         return json({ error: "not found" }, 404);
       } catch (err) {
@@ -159,6 +161,36 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
           const { habit, actor } = parsed.value;
           if (typeof habit !== "boolean") return json({ error: "habit must be a boolean" }, 400);
           return json(service.setHabit(id, habit, typeof actor === "string" ? actor : undefined));
+        } catch (err) {
+          return failure(err);
+        }
+      }
+
+      async function pushCompletion(req: Request): Promise<Response> {
+        const parsed = await body(req);
+        if (!parsed.ok) return parsed.res;
+        try {
+          const { externalId, title, date, completionCount, goal, actor } = parsed.value;
+          if (
+            typeof externalId !== "string" ||
+            typeof title !== "string" ||
+            typeof date !== "string" ||
+            typeof completionCount !== "number" ||
+            typeof goal !== "number"
+          ) {
+            return json({ error: "externalId, title, date, completionCount, goal are required" }, 400);
+          }
+          return json(
+            service.recordHabitCompletion({
+              externalId,
+              title,
+              date,
+              completionCount,
+              goal,
+              actor: typeof actor === "string" ? actor : undefined,
+            }),
+            201
+          );
         } catch (err) {
           return failure(err);
         }

@@ -219,6 +219,53 @@ describe("task service", () => {
     expect(svc.get("legacy-1")?.actor).toBeNull();
     svc.close();
   });
+
+  test("records a pushed habit completion, advancing only", () => {
+    const events: Array<{ action: string; actor: string | null }> = [];
+    const svc = createService(":memory:", { onEvent: (e) => events.push(e) });
+    const first = svc.recordHabitCompletion({
+      externalId: "habitui:5",
+      title: "Read",
+      date: "2026-09-08",
+      completionCount: 1,
+      goal: 2,
+      actor: "habit-agent",
+    });
+    expect(first.habit).toBe(true);
+    expect(first.status).toBe("in_progress");
+    const done = svc.recordHabitCompletion({
+      externalId: "habitui:5",
+      title: "Read",
+      date: "2026-09-08",
+      completionCount: 2,
+      goal: 2,
+      actor: "habit-agent",
+    });
+    expect(done.id).toBe(first.id);
+    expect(done.status).toBe("finished");
+    const regress = svc.recordHabitCompletion({
+      externalId: "habitui:5",
+      title: "Read",
+      date: "2026-09-09",
+      completionCount: 0,
+      goal: 2,
+      actor: "habit-agent",
+    });
+    expect(regress.status).toBe("finished");
+    expect(events.map((e) => e.action)).toEqual(["created", "status", "status"]);
+    expect(events.every((e) => e.actor === "habit-agent")).toBe(true);
+  });
+
+  test("rejects habit pushes without identity", () => {
+    const svc = createService(":memory:");
+    expect(() =>
+      svc.recordHabitCompletion({ externalId: "", title: "Read", date: "2026-09-08", completionCount: 1, goal: 1 })
+    ).toThrow();
+    expect(() =>
+      svc.recordHabitCompletion({ externalId: "habitui:5", title: "  ", date: "2026-09-08", completionCount: 1, goal: 1 })
+    ).toThrow();
+  });
+
   test("emits no events on reads", () => {
     const events: unknown[] = [];
     const svc = createService(":memory:", { onEvent: (e) => events.push(e) });

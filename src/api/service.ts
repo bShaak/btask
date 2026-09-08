@@ -17,6 +17,14 @@ export type UpdateArgs = { title?: string; notes?: string; actor?: string | null
 
 export type ListFilter = { project?: string };
 
+export type HabitCompletion = {
+  externalId: string;
+  title: string;
+  date: string;
+  completionCount: number;
+  goal: number;
+  actor?: string | null;
+};
 export type TaskEventAction = "created" | "updated" | "status" | "removed" | "completed" | "habit";
 export type TaskEvent = { action: TaskEventAction; id: string; actor: string | null };
 
@@ -36,6 +44,7 @@ export type Service = {
   remove: (id: string, actor?: string | null) => void;
   complete: (id: string, summary?: string, actor?: string | null) => Task;
   setHabit: (id: string, habit: boolean, actor?: string | null) => Task;
+  recordHabitCompletion: (args: HabitCompletion) => Task;
   habits: () => Task[];
   habitReminders: (date?: string) => HabitReminder[];
   subscribe: (listener: (event: TaskEvent) => void) => () => void;
@@ -168,6 +177,34 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
     },
     habits() {
       return store.listAll().filter((t) => t.habit && t.status !== "finished");
+    },
+    recordHabitCompletion(args) {
+      if (!args.externalId) throw new Error("externalId is required");
+      const title = args.title.trim();
+      if (!title) throw new Error("title is required");
+      const actor = args.actor ?? null;
+      let task = store.byExternalId(args.externalId);
+      if (!task) {
+        task = created(
+          store.create({
+            id: crypto.randomUUID(),
+            title,
+            habit: true,
+            externalId: args.externalId,
+            actor,
+            createdAt: Date.now(),
+          })
+        );
+      } else if (task.title !== title) {
+        task = store.update(task.id, { title, notes: task.notes }) as Task;
+      }
+      const met = args.completionCount >= Math.max(1, args.goal);
+      const ORDER: Record<Status, number> = { todo: 0, in_progress: 1, finished: 2 };
+      const next: Status = met ? "finished" : "in_progress";
+      if (ORDER[next] as number > (ORDER[task.status] as number)) {
+        return this.setStatus(task.id, next, actor);
+      }
+      return task;
     },
     habitReminders(date = todayLocal()) {
       return incompleteReminders(date, options.habitSummary);

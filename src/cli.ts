@@ -5,7 +5,7 @@ import { defaultDbPath, detectProject, ensureDirFor, portFilePath, resolveUrl } 
 import { asClient, createRemoteService, probeDaemon, type AsyncService } from "./server/remote.ts";
 import { createServer } from "./server/server.ts";
 
-const MUTATIONS = new Set(["create", "update", "delete", "status", "complete", "habit"]);
+const MUTATIONS = new Set(["create", "update", "delete", "status", "complete", "habit", "habits"]);
 
 function dbPath(): string {
   return defaultDbPath();
@@ -70,6 +70,7 @@ btask status <id> <todo|in_progress|finished> [--actor <name>] [--human]
 btask complete <id> [--summary <text>] [--actor <name>] [--human]
 btask habit <id> <on|off> [--actor <name>] [--human]
 btask habits [--human] [--local] [--date YYYY-MM-DD]
+btask habits push --external-id <id> --title <text> --date YYYY-MM-DD --count <n> --goal <n> [--actor <name>]
 btask serve [--port <n>]
 btask context [--human]`;
 }
@@ -149,7 +150,26 @@ export async function run(argv: string[]): Promise<void> {
       if (human) console.log(renderTaskHuman(task));
       else console.log(JSON.stringify(task, null, 2));
     } else if (cmd === "habits") {
-      if (hasFlag(rest, "--local")) {
+      if (rest[0] === "push") {
+        const count = Number(flagValue(rest, "--count"));
+        const goal = Number(flagValue(rest, "--goal"));
+        const externalId = flagValue(rest, "--external-id") ?? "";
+        const title = flagValue(rest, "--title") ?? "";
+        const date = flagValue(rest, "--date") ?? "";
+        if (!externalId || !title || !date || !Number.isInteger(count) || !Number.isInteger(goal)) {
+          throw new Error(usage());
+        }
+        const task = await client.recordHabitCompletion({
+          externalId,
+          title,
+          date,
+          completionCount: count,
+          goal,
+          actor: flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined,
+        });
+        if (human) console.log(renderTaskHuman(task));
+        else console.log(JSON.stringify(task, null, 2));
+      } else if (hasFlag(rest, "--local")) {
         const tasks = svc.habits();
         if (human) console.log(renderContextHuman(tasks).join("\n"));
         else console.log(JSON.stringify(tasks, null, 2));
