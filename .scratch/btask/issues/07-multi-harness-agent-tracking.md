@@ -14,13 +14,16 @@
 
 Harness-agnostic HTTP API instead of per-harness plugins:
 
-- Single-writer daemon: the HTTP server serializes concurrent writes and broadcasts WS events; it is the canonical agent path.
+- Shared user-level DB (`~/.btask/btask.db` default; `BTASK_DB` escapes to per-repo isolation). One global goal list across repos; starts empty.
+- Single-writer daemon: the HTTP server serializes concurrent writes and broadcasts WS events; it is the canonical agent path. Loopback-only, no auth; host configurable.
 - Discovery: `BTASK_URL` env, else a port file, else default `127.0.0.1:3000`; `GET /health` returns the version for handshakes.
+- API break to `/api/v1`-only (no clients yet, no aliases).
+- Free-form actor strings (`harness:detail` by convention), stored on writes, surfaced in reads and WS events.
+- Optional project label on tasks (auto-detected from git root, `list --project` filter); null means global.
 - CLI delegates to the daemon when reachable, direct DB as fallback; agent UX unchanged.
-- Actor attribution on writes, surfaced in reads and WS events.
 - Habit agents push completions to btask; the habitui pull stays as fallback.
 
-Slices: 08 (versioned API + discovery), 09 (CLI delegation), 10 (actors), 11 (habit push).
+Slices: 08 (versioned API + discovery + shared default + project label), 09 (CLI delegation), 10 (actors), 11 (habit push).
 
 ## Comments
 
