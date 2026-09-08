@@ -32,41 +32,63 @@ async function post(url: string, body: unknown): Promise<{ status: number; json:
 }
 
 describe("http server", () => {
+  test("reports health with a version", async () => {
+    const url = await boot();
+    const res = await fetch(`${url}/health`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: "ok", version: "0.1.0" });
+  });
+
+  test("rejects unversioned routes", async () => {
+    const url = await boot();
+    expect((await fetch(`${url}/tasks`)).status).toBe(404);
+  });
+
+  test("filters tasks by project", async () => {
+    const url = await boot();
+    await post(`${url}/api/v1/tasks`, { title: "Ship", project: "btask" });
+    await post(`${url}/api/v1/tasks`, { title: "Exercise" });
+    const filtered = (await (await fetch(`${url}/api/v1/tasks?project=btask`)).json()) as Array<{
+      task: { title: string };
+    }>;
+    expect(filtered.map((n) => n.task.title)).toEqual(["Ship"]);
+  });
+
   test("round-trips tasks with CLI semantics", async () => {
     const url = await boot();
-    const created = await post(`${url}/tasks`, { title: "Ship" });
+    const created = await post(`${url}/api/v1/tasks`, { title: "Ship" });
     expect(created.status).toBe(201);
     const id = (created.json as { id: string }).id;
-    const fetched = await fetch(`${url}/tasks/${id}`);
+    const fetched = await fetch(`${url}/api/v1/tasks/${id}`);
     expect(fetched.status).toBe(200);
-    const patched = await fetch(`${url}/tasks/${id}`, {
+    const patched = await fetch(`${url}/api/v1/tasks/${id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ status: "in_progress" }),
     });
     expect(((await patched.json()) as { status: string }).status).toBe("in_progress");
-    const listed = (await (await fetch(`${url}/tasks`)).json()) as Array<{ task: { id: string } }>;
+    const listed = (await (await fetch(`${url}/api/v1/tasks`)).json()) as Array<{ task: { id: string } }>;
     expect(listed.map((n) => n.task.id)).toEqual([id]);
-    const gone = await fetch(`${url}/tasks/${id}`, { method: "DELETE" });
+    const gone = await fetch(`${url}/api/v1/tasks/${id}`, { method: "DELETE" });
     expect(gone.status).toBe(200);
-    expect((await (await fetch(`${url}/tasks`)).json()) as unknown[]).toEqual([]);
+    expect((await (await fetch(`${url}/api/v1/tasks`)).json()) as unknown[]).toEqual([]);
   });
 
   test("returns 404 for missing tasks and 400 for bad input", async () => {
     const url = await boot();
-    expect((await fetch(`${url}/tasks/nope`)).status).toBe(404);
-    const bad = await post(`${url}/tasks`, { title: "  " });
+    expect((await fetch(`${url}/api/v1/tasks/nope`)).status).toBe(404);
+    const bad = await post(`${url}/api/v1/tasks`, { title: "  " });
     expect(bad.status).toBe(400);
   });
 
   test("completes a goal and exposes context", async () => {
     const url = await boot();
-    const goal = (await (await post(`${url}/tasks`, { title: "Ship" })).json) as { id: string };
-    await post(`${url}/tasks`, { title: "Store", parentId: goal.id });
-    const done = await post(`${url}/tasks/${goal.id}/complete`, { summary: "v1" });
+    const goal = (await (await post(`${url}/api/v1/tasks`, { title: "Ship" })).json) as { id: string };
+    await post(`${url}/api/v1/tasks`, { title: "Store", parentId: goal.id });
+    const done = await post(`${url}/api/v1/tasks/${goal.id}/complete`, { summary: "v1" });
     expect(done.status).toBe(200);
     expect(((done.json as { status: string }).status)).toBe("finished");
-    const ctx = (await (await fetch(`${url}/context`)).json()) as Array<{ id: string }>;
+    const ctx = (await (await fetch(`${url}/api/v1/context`)).json()) as Array<{ id: string }>;
     expect(ctx.map((t) => t.id)).toEqual([goal.id]);
   });
 
@@ -76,7 +98,7 @@ describe("http server", () => {
     const received: unknown[] = [];
     await new Promise<void>((resolve) => ws.addEventListener("open", () => resolve()));
     ws.addEventListener("message", (evt) => received.push(JSON.parse(String(evt.data))));
-    await post(`${url}/tasks`, { title: "Ship" });
+    await post(`${url}/api/v1/tasks`, { title: "Ship" });
     const deadline = Date.now() + 2000;
     while (received.length === 0 && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 25));

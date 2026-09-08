@@ -10,7 +10,8 @@ import {
 export type { HabitReminder };
 export type { Status, Task };
 export type TaskNode = { task: Task; children: TaskNode[] };
-export type CreateArgs = { title: string; notes?: string; parentId?: string; habit?: boolean };
+export type CreateArgs = { title: string; notes?: string; parentId?: string; habit?: boolean; project?: string | null };
+export type ListFilter = { project?: string };
 
 export type UpdateArgs = { title?: string; notes?: string };
 
@@ -27,7 +28,7 @@ export type ServiceOptions = {
 export type Service = {
   create: (args: CreateArgs) => Task;
   get: (id: string) => Task | null;
-  list: () => TaskNode[];
+  list: (filter?: ListFilter) => TaskNode[];
   setStatus: (id: string, status: Status) => Task;
   update: (id: string, patch: UpdateArgs) => Task;
   remove: (id: string) => void;
@@ -74,8 +75,9 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
     create(args) {
       const title = args.title.trim();
       if (!title) throw new Error("title is required");
+      let parent: Task | null = null;
       if (args.parentId) {
-        const parent = store.get(args.parentId);
+        parent = store.get(args.parentId);
         if (!parent) throw new Error(`parent not found: ${args.parentId}`);
       }
       return created(
@@ -85,6 +87,7 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
           notes: args.notes ?? "",
           parentId: args.parentId,
           habit: args.habit,
+          project: args.project === undefined ? (parent?.project ?? null) : args.project,
           createdAt: Date.now(),
         })
       );
@@ -92,8 +95,11 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
     get(id) {
       return store.get(id);
     },
-    list() {
-      const tasks = store.listAll();
+    list(filter = {}) {
+      const tasks =
+        filter.project === undefined
+          ? store.listAll()
+          : store.listAll().filter((t) => t.project === filter.project);
       const byParent = new Map<string | null, Task[]>();
       for (const t of tasks) {
         const key = t.parentId ?? null;

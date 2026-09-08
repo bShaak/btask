@@ -1,9 +1,14 @@
 import type { ServerWebSocket } from "bun";
+import { rmSync, writeFileSync } from "node:fs";
 import type { Service, Status, TaskEvent } from "../api/service.ts";
+import { ensureDirFor } from "../lib/discovery.ts";
+
+export const VERSION = "0.1.0";
 
 export type ServerOptions = {
   port?: number;
   hostname?: string;
+  portFile?: string;
 };
 
 export type RunningServer = {
@@ -43,16 +48,24 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
     fetch(req, server) {
       const url = new URL(req.url);
       const parts = url.pathname.split("/").filter((p) => p.length > 0);
+      if (parts[0] === "health" && parts.length === 1 && req.method === "GET") {
+        return json({ status: "ok", version: VERSION });
+      }
       if (parts[0] === "events") {
         if (server.upgrade(req)) return;
         return json({ error: "websocket required" }, 400);
       }
+      if (parts[0] !== "api" || parts[1] !== "v1") return json({ error: "not found" }, 404);
+      const route = parts.slice(2);
       try {
-        if (parts[0] === "tasks" && parts.length === 1) {
-          if (req.method === "GET") return json(service.list());
+        if (route[0] === "tasks" && route.length === 1) {
+          if (req.method === "GET") {
+            const project = url.searchParams.get("project") ?? undefined;
+            return json(service.list(project === undefined ? undefined : { project }));
+          }
           if (req.method === "POST") return create(req);
-        } else if (parts[0] === "tasks" && parts.length === 2) {
-          const id = parts[1] as string;
+        } else if (route[0] === "tasks" && route.length === 2) {
+          const id = route[1] as string;
           if (req.method === "GET") {
             const task = service.get(id);
             if (!task) return json({ error: `task not found: ${id}` }, 404);
@@ -63,15 +76,15 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
             service.remove(id);
             return json({ deleted: id });
           }
-        } else if (parts[0] === "tasks" && parts.length === 3 && parts[2] === "complete") {
-          if (req.method === "POST") return complete(req, parts[1] as string);
-        } else if (parts[0] === "tasks" && parts.length === 3 && parts[2] === "habit") {
-          if (req.method === "POST") return habit(req, parts[1] as string);
-        } else if (parts[0] === "context" && parts.length === 1 && req.method === "GET") {
+        } else if (route[0] === "tasks" && route.length === 3 && route[2] === "complete") {
+          if (req.method === "POST") return complete(req, route[1] as string);
+        } else if (route[0] === "tasks" && route.length === 3 && route[2] === "habit") {
+          if (req.method === "POST") return habit(req, route[1] as string);
+        } else if (route[0] === "context" && route.length === 1 && req.method === "GET") {
           return json(service.context());
-        } else if (parts[0] === "habits" && parts.length === 1 && req.method === "GET") {
+        } else if (route[0] === "habits" && route.length === 1 && req.method === "GET") {
           return json(service.habitReminders(url.searchParams.get("date") ?? undefined));
-        } else if (parts[0] === "habits" && parts.length === 2 && parts[1] === "local" && req.method === "GET") {
+        } else if (route[0] === "habits" && route.length === 2 && route[1] === "local" && req.method === "GET") {
           return json(service.habits());
         }
         return json({ error: "not found" }, 404);
@@ -82,7 +95,7 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
       async function create(req: Request): Promise<Response> {
         const parsed = await body(req);
         if (!parsed.ok) return parsed.res;
-        const { title, parentId, notes, habit } = parsed.value;
+        const { title, parentId, notes, habit, project } = parsed.value;
         if (typeof title !== "string") return json({ error: "title is required" }, 400);
         try {
           const task = service.create({
@@ -90,6 +103,7 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
             parentId: typeof parentId === "string" ? parentId : undefined,
             notes: typeof notes === "string" ? notes : undefined,
             habit: typeof habit === "boolean" ? habit : undefined,
+            project: typeof project === "string" ? project : undefined,
           });
           return json(task, 201);
         } catch (err) {
@@ -152,11 +166,18 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
     },
   });
 
+  const url = `http://${server.hostname}:${server.port}`;
+  if (options.portFile) {
+    ensureDirFor(options.portFile);
+    writeFileSync(options.portFile, `${url}\n`);
+  }
+
   return {
-    url: `http://${server.hostname}:${server.port}`,
+    url,
     stop: () => {
       unsubscribe();
       server.stop();
+      if (options.portFile) rmSync(options.portFile, { force: true });
     },
   };
 }

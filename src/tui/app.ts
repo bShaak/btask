@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { createService, type Service, type TaskNode } from "../api/service.ts";
+import { defaultDbPath } from "../lib/discovery.ts";
 import { render } from "./render.ts";
 
 const NEXT: Record<string, "todo" | "in_progress" | "finished"> = {
@@ -134,7 +135,7 @@ export function start(options: { service: Service; stdin?: typeof process.stdin;
 }
 
 if (import.meta.main) {
-  const db = process.env["BTASK_DB"] ?? ".btask/btask.db";
+  const db = defaultDbPath();
   if (db !== ":memory:") mkdirSync(dirname(db), { recursive: true });
   const service = createService(db, { artifactDir: process.env["BTASK_ARTIFACTS"] ?? "artifacts" });
   try {

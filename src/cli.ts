@@ -1,10 +1,11 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { createService, type HabitReminder, type Task, type TaskNode } from "./api/service.ts";
+import { defaultDbPath, detectProject, ensureDirFor, portFilePath } from "./lib/discovery.ts";
 import { createServer } from "./server/server.ts";
 
 function dbPath(): string {
-  return process.env["BTASK_DB"] ?? ".btask/btask.db";
+  return defaultDbPath();
 }
 
 function ensureService() {
@@ -56,9 +57,9 @@ function renderContextHuman(tasks: Task[]): string[] {
 }
 
 function usage(): string {
-  return `btask list [--human]
+  return `btask list [--human] [--project <name>]
 btask get <id> [--human]
-btask create <title> [--parent <id>] [--notes <text>] [--habit] [--human]
+btask create <title> [--parent <id>] [--notes <text>] [--habit] [--project <name>] [--human]
 btask update <id> [--title <text>] [--notes <text>] [--human]
 btask delete <id>
 btask status <id> <todo|in_progress|finished> [--human]
@@ -76,7 +77,8 @@ export function run(argv: string[]): void {
   let leaveOpen = false;
   try {
     if (cmd === "list") {
-      const tree = svc.list();
+      const project = flagValue(rest, "--project");
+      const tree = svc.list(project === undefined ? undefined : { project });
       if (human) console.log(renderHuman(tree).join("\n"));
       else console.log(JSON.stringify(tree, null, 2));
     } else if (cmd === "get") {
@@ -89,11 +91,13 @@ export function run(argv: string[]): void {
     } else if (cmd === "create") {
       const title = rest.find((a) => !a.startsWith("-"));
       if (!title) throw new Error(usage());
+      const parentId = flagValue(rest, "--parent");
       const task = svc.create({
         title,
-        parentId: flagValue(rest, "--parent"),
+        parentId,
         notes: flagValue(rest, "--notes"),
         habit: hasFlag(rest, "--habit"),
+        project: flagValue(rest, "--project") ?? (parentId ? undefined : detectProject()),
       });
       if (human) console.log(`[ ] ${task.title} (${task.id.slice(0, 8)})`);
       else console.log(JSON.stringify(task, null, 2));
@@ -138,7 +142,14 @@ export function run(argv: string[]): void {
     } else if (cmd === "serve") {
       const port = Number(flagValue(rest, "--port") ?? process.env["BTASK_PORT"] ?? 3000);
       if (!Number.isInteger(port) || port < 0) throw new Error(usage());
-      const srv = createServer(svc, { port });
+      const file = portFilePath();
+      const srv = createServer(svc, { port, portFile: file });
+      const shutdown = (): void => {
+        srv.stop();
+        process.exit(0);
+      };
+      process.on("SIGINT", shutdown);
+      process.on("SIGTERM", shutdown);
       console.log(`listening on ${srv.url}`);
       leaveOpen = true;
       return;

@@ -194,4 +194,42 @@ describe("task service", () => {
     svc.habits();
     expect(events).toEqual([]);
   });
+
+  test("stores an explicit project and filters by it", () => {
+    const svc = createService(":memory:");
+    const a = svc.create({ title: "Ship", project: "btask" });
+    svc.create({ title: "Exercise" });
+    expect(svc.get(a.id)?.project).toBe("btask");
+    expect(svc.list({ project: "btask" }).map((n) => n.task.id)).toEqual([a.id]);
+    expect(svc.list().length).toBe(2);
+  });
+
+  test("sub-tasks inherit the parent project", () => {
+    const svc = createService(":memory:");
+    const goal = svc.create({ title: "Ship", project: "btask" });
+    const sub = svc.create({ title: "Store", parentId: goal.id });
+    expect(sub.project).toBe("btask");
+    const explicit = svc.create({ title: "Other", parentId: goal.id, project: "other" });
+    expect(explicit.project).toBe("other");
+  });
+
+  test("migrates databases created before the project column", async () => {
+    const { Database } = await import("bun:sqlite");
+    const dir = mkdtempSync(join(tmpdir(), "btask-legacy-"));
+    const path = join(dir, "btask.db");
+    const db = new Database(path, { create: true });
+    db.run(
+      `CREATE TABLE tasks (
+        id TEXT PRIMARY KEY, title TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '',
+        parentId TEXT, status TEXT NOT NULL DEFAULT 'todo',
+        habit INTEGER NOT NULL DEFAULT 0, createdAt INTEGER NOT NULL
+      )`
+    );
+    db.run(`INSERT INTO tasks (id, title, createdAt) VALUES ('legacy-1', 'Old goal', 0)`);
+    db.close();
+    const svc = createService(path);
+    expect(svc.get("legacy-1")?.project).toBeNull();
+    expect(svc.list({ project: "btask" })).toEqual([]);
+    svc.close();
+  });
 });

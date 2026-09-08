@@ -11,6 +11,7 @@ function node(id: string, title: string, status: "todo" | "in_progress" | "finis
       parentId: null,
       status,
       habit: false,
+      project: null,
       createdAt: 0,
     },
     children,

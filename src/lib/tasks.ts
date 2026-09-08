@@ -9,6 +9,7 @@ export type Task = {
   parentId: string | null;
   status: Status;
   habit: boolean;
+  project: string | null;
   createdAt: number;
 };
 
@@ -17,6 +18,7 @@ export type CreateInput = {
   notes?: string;
   parentId?: string;
   habit?: boolean;
+  project?: string | null;
 };
 
 export type TaskStore = {
@@ -42,12 +44,17 @@ export function openStore(path: string): TaskStore {
       parentId TEXT,
       status TEXT NOT NULL DEFAULT 'todo',
       habit INTEGER NOT NULL DEFAULT 0,
+      project TEXT,
       createdAt INTEGER NOT NULL
     )`
   );
+  const columns = (db.query(`PRAGMA table_info(tasks)`).all() as Array<{ name: string }>).map(
+    (c) => c.name
+  );
+  if (!columns.includes("project")) db.run(`ALTER TABLE tasks ADD COLUMN project TEXT`);
   const insert = db.prepare(
-    `INSERT INTO tasks (id, title, notes, parentId, status, habit, createdAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO tasks (id, title, notes, parentId, status, habit, project, createdAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const byId = db.prepare(`SELECT * FROM tasks WHERE id = ?`);
   const all = db.prepare(`SELECT * FROM tasks ORDER BY rowid ASC`);
@@ -65,6 +72,7 @@ export function openStore(path: string): TaskStore {
       parentId: row["parentId"] == null ? null : String(row["parentId"]),
       status: (STATUSES.has(status) ? status : "todo") as Status,
       habit: Number(row["habit"] ?? 0) === 1,
+      project: row["project"] == null ? null : String(row["project"]),
       createdAt: Number(row["createdAt"] ?? 0),
     };
   }
@@ -78,6 +86,7 @@ export function openStore(path: string): TaskStore {
         input.parentId ?? null,
         "todo",
         input.habit ? 1 : 0,
+        input.project ?? null,
         input.createdAt
       );
       return this.get(input.id) as Task;
