@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createService } from "../api/service.ts";
 import { createServer } from "./server.ts";
 import { createRemoteService } from "./remote.ts";
@@ -6,7 +9,8 @@ import { createRemoteService } from "./remote.ts";
 describe("remote service", () => {
   test("mirrors direct service output shapes", async () => {
     const direct = createService(":memory:");
-    const local = createService(":memory:");
+    const dir = mkdtempSync(join(tmpdir(), "btask-remote-"));
+    const local = createService(":memory:", { artifactDir: join(dir, "artifacts") });
     const server = createServer(local, { port: 0 });
     const remote = createRemoteService(server.url);
     try {
