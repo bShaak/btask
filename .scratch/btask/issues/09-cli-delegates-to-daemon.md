@@ -9,3 +9,4 @@
 - [ ] CLI resolves the daemon URL via the discovery chain and forwards mutating commands over HTTP
 - [ ] Output shapes are byte-identical between daemon and direct paths
 - [ ] Daemon unreachable → transparent direct-DB fallback (reads always work offline)
+- [ ] Artifact location agreed between paths: with the DB now shared, decide where `complete` writes artifacts (shared dir vs cwd-relative) so daemon and direct paths don't split them
