@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createService } from "./service.ts";
 
+process.env["HOME"] = mkdtempSync(join(tmpdir(), "btask-test-home-"));
+
 describe("task service", () => {
   test("creates goals with sub-tasks indented in creation order", () => {
     const svc = createService(":memory:");
@@ -163,19 +165,12 @@ describe("task service", () => {
   });
 
   test("defaults artifacts to the shared dir", () => {
-    const home = mkdtempSync(join(tmpdir(), "btask-home-"));
-    const saved = process.env["HOME"];
-    process.env["HOME"] = home;
-    try {
-      const svc = createService(":memory:");
-      const goal = svc.create({ title: "Ship" });
-      svc.complete(goal.id);
-      expect(readdirSync(join(home, ".btask", "artifacts")).length).toBe(1);
-      svc.close();
-    } finally {
-      if (saved === undefined) delete process.env["HOME"];
-      else process.env["HOME"] = saved;
-    }
+    const svc = createService(":memory:");
+    const goal = svc.create({ title: "Default dir probe" });
+    svc.complete(goal.id);
+    const files = readdirSync(join(process.env["HOME"] as string, ".btask", "artifacts"));
+    expect(files.filter((f) => f.includes("default-dir-probe")).length).toBe(1);
+    svc.close();
   });
 
   test("records the actor on tasks and reads it back", () => {

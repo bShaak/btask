@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { createService, type HabitReminder, type Task, type TaskNode } from "./api/service.ts";
-import { defaultDbPath, detectProject, ensureDirFor, portFilePath, resolveUrl } from "./lib/discovery.ts";
+import { defaultArtifactDir, defaultDbPath, detectProject, ensureDirFor, portFilePath, resolveUrl } from "./lib/discovery.ts";
 import { asClient, createRemoteService, probeDaemon, type AsyncService } from "./server/remote.ts";
 import { createServer } from "./server/server.ts";
 
@@ -14,7 +14,7 @@ function dbPath(): string {
 function ensureService() {
   const path = dbPath();
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-  return createService(path, { artifactDir: process.env["BTASK_ARTIFACTS"] ?? "artifacts" });
+  return createService(path, { artifactDir: defaultArtifactDir() });
 }
 
 function hasFlag(args: string[], ...names: string[]): boolean {
