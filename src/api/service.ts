@@ -11,13 +11,14 @@ import { defaultArtifactDir } from "../lib/discovery.ts";
 export type { HabitReminder };
 export type { Status, Task };
 export type TaskNode = { task: Task; children: TaskNode[] };
-export type CreateArgs = { title: string; notes?: string; parentId?: string; habit?: boolean; project?: string | null };
+export type CreateArgs = { title: string; notes?: string; parentId?: string; habit?: boolean; project?: string | null; actor?: string | null };
+
+export type UpdateArgs = { title?: string; notes?: string; actor?: string | null };
+
 export type ListFilter = { project?: string };
 
-export type UpdateArgs = { title?: string; notes?: string };
-
 export type TaskEventAction = "created" | "updated" | "status" | "removed" | "completed" | "habit";
-export type TaskEvent = { action: TaskEventAction; id: string };
+export type TaskEvent = { action: TaskEventAction; id: string; actor: string | null };
 
 export type ServiceOptions = {
   artifactDir?: string;
@@ -30,11 +31,11 @@ export type Service = {
   create: (args: CreateArgs) => Task;
   get: (id: string) => Task | null;
   list: (filter?: ListFilter) => TaskNode[];
-  setStatus: (id: string, status: Status) => Task;
+  setStatus: (id: string, status: Status, actor?: string | null) => Task;
   update: (id: string, patch: UpdateArgs) => Task;
-  remove: (id: string) => void;
-  complete: (id: string, summary?: string) => Task;
-  setHabit: (id: string, habit: boolean) => Task;
+  remove: (id: string, actor?: string | null) => void;
+  complete: (id: string, summary?: string, actor?: string | null) => Task;
+  setHabit: (id: string, habit: boolean, actor?: string | null) => Task;
   habits: () => Task[];
   habitReminders: (date?: string) => HabitReminder[];
   subscribe: (listener: (event: TaskEvent) => void) => () => void;
@@ -50,8 +51,8 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
   const now = options.now ?? Date.now;
   const listeners = new Set<(event: TaskEvent) => void>();
   if (options.onEvent) listeners.add(options.onEvent);
-  const emit = (action: TaskEventAction, id: string): void => {
-    const event = { action, id };
+  const emit = (action: TaskEventAction, id: string, actor: string | null = null): void => {
+    const event = { action, id, actor };
     for (const listener of listeners) listener(event);
   };
   function collectSubtree(rootId: string): string[] {
@@ -69,7 +70,7 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
     return found;
   }
   const created = (task: Task): Task => {
-    emit("created", task.id);
+    emit("created", task.id, task.actor);
     return task;
   };
   return {
@@ -89,6 +90,7 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
           parentId: args.parentId,
           habit: args.habit,
           project: args.project === undefined ? (parent?.project ?? null) : args.project,
+          actor: args.actor ?? null,
           createdAt: Date.now(),
         })
       );
@@ -115,12 +117,12 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
         }));
       return build(null);
     },
-    setStatus(id, status) {
+    setStatus(id, status, actor = null) {
       if (!VALID.has(status)) throw new Error(`invalid status: ${status}`);
       const existing = store.get(id);
       if (!existing) throw new Error(`task not found: ${id}`);
       const next = store.setStatus(id, status) as Task;
-      emit("status", id);
+      emit("status", id, actor);
       return next;
     },
     update(id, patch) {
@@ -131,18 +133,19 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
       const next = store.update(id, {
         title,
         notes: patch.notes === undefined ? existing.notes : patch.notes,
+        actor: patch.actor,
       }) as Task;
-      emit("updated", id);
+      emit("updated", id, patch.actor ?? null);
       return next;
     },
-    remove(id) {
+    remove(id, actor = null) {
       const existing = store.get(id);
       if (!existing) throw new Error(`task not found: ${id}`);
       store.remove(id);
       for (const target of collectSubtree(id)) store.remove(target);
-      emit("removed", id);
+      emit("removed", id, actor);
     },
-    complete(id, summary) {
+    complete(id, summary, actor = null) {
       const goal = store.get(id);
       if (!goal) throw new Error(`task not found: ${id}`);
       const subtree = collectSubtree(id);
@@ -150,17 +153,17 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
       const finished = store.setStatus(id, "finished") as Task;
       writeArtifact({ dir: artifactDir, goal: finished, subtasks, summary, now: now() });
       for (const target of subtree) store.remove(target);
-      emit("completed", id);
+      emit("completed", id, actor);
       return finished;
     },
     context() {
       return store.listAll();
     },
-    setHabit(id, habit) {
+    setHabit(id, habit, actor = null) {
       const existing = store.get(id);
       if (!existing) throw new Error(`task not found: ${id}`);
       const next = store.setHabit(id, habit) as Task;
-      emit("habit", id);
+      emit("habit", id, actor);
       return next;
     },
     habits() {

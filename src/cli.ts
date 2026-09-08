@@ -45,7 +45,8 @@ function renderHuman(nodes: TaskNode[], depth = 0): string[] {
 function renderTaskHuman(task: Task): string {
   const mark = task.status === "finished" ? "[x]" : task.status === "in_progress" ? "[~]" : "[ ]";
   const notes = task.notes ? `\n  notes: ${task.notes}` : "";
-  return `${mark} ${task.title} (${task.id.slice(0, 8)}) [${task.status}]${notes}`;
+  const actor = task.actor ? ` @${task.actor}` : "";
+  return `${mark} ${task.title} (${task.id.slice(0, 8)}) [${task.status}]${actor}${notes}`;
 }
 
 function renderRemindersHuman(reminders: HabitReminder[]): string[] {
@@ -62,12 +63,12 @@ function renderContextHuman(tasks: Task[]): string[] {
 function usage(): string {
   return `btask list [--human] [--project <name>]
 btask get <id> [--human]
-btask create <title> [--parent <id>] [--notes <text>] [--habit] [--project <name>] [--human]
-btask update <id> [--title <text>] [--notes <text>] [--human]
-btask delete <id>
-btask status <id> <todo|in_progress|finished> [--human]
-btask complete <id> [--summary <text>] [--human]
-btask habit <id> <on|off> [--human]
+btask create <title> [--parent <id>] [--notes <text>] [--habit] [--project <name>] [--actor <name>] [--human]
+btask update <id> [--title <text>] [--notes <text>] [--actor <name>] [--human]
+btask delete <id> [--actor <name>]
+btask status <id> <todo|in_progress|finished> [--actor <name>] [--human]
+btask complete <id> [--summary <text>] [--actor <name>] [--human]
+btask habit <id> <on|off> [--actor <name>] [--human]
 btask habits [--human] [--local] [--date YYYY-MM-DD]
 btask serve [--port <n>]
 btask context [--human]`;
@@ -106,6 +107,7 @@ export async function run(argv: string[]): Promise<void> {
         notes: flagValue(rest, "--notes"),
         habit: hasFlag(rest, "--habit"),
         project: flagValue(rest, "--project") ?? (parentId ? undefined : detectProject()),
+        actor: flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"],
       });
       if (human) console.log(`[ ] ${task.title} (${task.id.slice(0, 8)})`);
       else console.log(JSON.stringify(task, null, 2));
@@ -115,26 +117,35 @@ export async function run(argv: string[]): Promise<void> {
       const task = await client.update(id, {
         title: flagValue(rest, "--title"),
         notes: flagValue(rest, "--notes"),
+        actor: flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined,
       });
       if (human) console.log(renderTaskHuman(task));
       else console.log(JSON.stringify(task, null, 2));
     } else if (cmd === "delete") {
       const [id] = rest.filter((a) => !a.startsWith("-"));
       if (!id) throw new Error(usage());
-      await client.remove(id);
+      await client.remove(id, flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined);
       if (human) console.log(`deleted ${id.slice(0, 8)}`);
       else console.log(JSON.stringify({ deleted: id }));
     } else if (cmd === "complete") {
       const [id] = rest.filter((a) => !a.startsWith("-"));
       if (!id) throw new Error(usage());
-      const task = await client.complete(id, flagValue(rest, "--summary"));
+      const task = await client.complete(
+        id,
+        flagValue(rest, "--summary"),
+        flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined
+      );
       if (human) console.log(`[x] ${task.title} (${task.id.slice(0, 8)})`);
       else console.log(JSON.stringify(task, null, 2));
     } else if (cmd === "habit") {
       const positional = rest.filter((a) => !a.startsWith("-"));
       const [id, value] = positional;
       if (!id || (value !== "on" && value !== "off")) throw new Error(usage());
-      const task = await client.setHabit(id, value === "on");
+      const task = await client.setHabit(
+        id,
+        value === "on",
+        flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined
+      );
       if (human) console.log(renderTaskHuman(task));
       else console.log(JSON.stringify(task, null, 2));
     } else if (cmd === "habits") {
@@ -169,7 +180,11 @@ export async function run(argv: string[]): Promise<void> {
       const positional = rest.filter((a) => !a.startsWith("-"));
       const [id, status] = positional;
       if (!id || !status) throw new Error(usage());
-      const task = await client.setStatus(id, status as "todo" | "in_progress" | "finished");
+      const task = await client.setStatus(
+        id,
+        status as "todo" | "in_progress" | "finished",
+        flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined
+      );
       if (human) console.log(`${task.status} ${task.title} (${task.id.slice(0, 8)})`);
       else console.log(JSON.stringify(task, null, 2));
     } else {

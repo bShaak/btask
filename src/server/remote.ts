@@ -61,11 +61,11 @@ export function createRemoteService(baseUrl: string): AsyncService {
     get: (id) => request(`/api/v1/tasks/${id}`) as Promise<never>,
     list: (filter) =>
       request(`/api/v1/tasks${filter?.project ? `?project=${encodeURIComponent(filter.project)}` : ""}`) as Promise<never>,
-    setStatus: (id, status) =>
+    setStatus: (id, status, actor) =>
       request(`/api/v1/tasks/${id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, actor }),
       }) as Promise<never>,
     update: (id, patch) =>
       request(`/api/v1/tasks/${id}`, {
@@ -73,18 +73,21 @@ export function createRemoteService(baseUrl: string): AsyncService {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(patch),
       }) as Promise<never>,
-    remove: (id) => request(`/api/v1/tasks/${id}`, { method: "DELETE" }) as Promise<never>,
-    complete: (id, summary) =>
+    remove: (id, actor) =>
+      request(`/api/v1/tasks/${id}${actor ? `?actor=${encodeURIComponent(actor)}` : ""}`, {
+        method: "DELETE",
+      }) as Promise<never>,
+    complete: (id, summary, actor) =>
       request(`/api/v1/tasks/${id}/complete`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ summary }),
+        body: JSON.stringify({ summary, actor }),
       }) as Promise<never>,
-    setHabit: (id, habit) =>
+    setHabit: (id, habit, actor) =>
       request(`/api/v1/tasks/${id}/habit`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ habit }),
+        body: JSON.stringify({ habit, actor }),
       }) as Promise<never>,
     habits: () => request("/api/v1/habits/local") as Promise<never>,
     habitReminders: (date) =>

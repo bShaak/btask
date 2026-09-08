@@ -10,6 +10,7 @@ export type Task = {
   status: Status;
   habit: boolean;
   project: string | null;
+  actor: string | null;
   createdAt: number;
 };
 
@@ -19,6 +20,7 @@ export type CreateInput = {
   parentId?: string;
   habit?: boolean;
   project?: string | null;
+  actor?: string | null;
 };
 
 export type TaskStore = {
@@ -26,7 +28,7 @@ export type TaskStore = {
   get: (id: string) => Task | null;
   listAll: () => Task[];
   setStatus: (id: string, status: Status) => Task | null;
-  update: (id: string, patch: { title: string; notes: string }) => Task | null;
+  update: (id: string, patch: { title: string; notes: string; actor?: string | null }) => Task | null;
   setHabit: (id: string, habit: boolean) => Task | null;
   remove: (id: string) => void;
   close: () => void;
@@ -45,6 +47,7 @@ export function openStore(path: string): TaskStore {
       status TEXT NOT NULL DEFAULT 'todo',
       habit INTEGER NOT NULL DEFAULT 0,
       project TEXT,
+      actor TEXT,
       createdAt INTEGER NOT NULL
     )`
   );
@@ -52,14 +55,15 @@ export function openStore(path: string): TaskStore {
     (c) => c.name
   );
   if (!columns.includes("project")) db.run(`ALTER TABLE tasks ADD COLUMN project TEXT`);
+  if (!columns.includes("actor")) db.run(`ALTER TABLE tasks ADD COLUMN actor TEXT`);
   const insert = db.prepare(
-    `INSERT INTO tasks (id, title, notes, parentId, status, habit, project, createdAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO tasks (id, title, notes, parentId, status, habit, project, actor, createdAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const byId = db.prepare(`SELECT * FROM tasks WHERE id = ?`);
   const all = db.prepare(`SELECT * FROM tasks ORDER BY rowid ASC`);
   const updateStatus = db.prepare(`UPDATE tasks SET status = ? WHERE id = ?`);
-  const updateFields = db.prepare(`UPDATE tasks SET title = ?, notes = ? WHERE id = ?`);
+  const updateFields = db.prepare(`UPDATE tasks SET title = ?, notes = ?, actor = ? WHERE id = ?`);
   const updateHabit = db.prepare(`UPDATE tasks SET habit = ? WHERE id = ?`);
   const deleteById = db.prepare(`DELETE FROM tasks WHERE id = ?`);
 
@@ -73,6 +77,7 @@ export function openStore(path: string): TaskStore {
       status: (STATUSES.has(status) ? status : "todo") as Status,
       habit: Number(row["habit"] ?? 0) === 1,
       project: row["project"] == null ? null : String(row["project"]),
+      actor: row["actor"] == null ? null : String(row["actor"]),
       createdAt: Number(row["createdAt"] ?? 0),
     };
   }
@@ -87,6 +92,7 @@ export function openStore(path: string): TaskStore {
         "todo",
         input.habit ? 1 : 0,
         input.project ?? null,
+        input.actor ?? null,
         input.createdAt
       );
       return this.get(input.id) as Task;
@@ -103,7 +109,8 @@ export function openStore(path: string): TaskStore {
       return this.get(id);
     },
     update(id, patch) {
-      updateFields.run(patch.title, patch.notes, id);
+      const current = this.get(id);
+      updateFields.run(patch.title, patch.notes, patch.actor === undefined ? (current?.actor ?? null) : patch.actor, id);
       return this.get(id);
     },
     setHabit(id, habit) {

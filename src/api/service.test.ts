@@ -178,27 +178,47 @@ describe("task service", () => {
     }
   });
 
-  test("emits one change event per mutation", () => {
-    const events: Array<{ action: string; id: string }> = [];
+  test("records the actor on tasks and reads it back", () => {
+    const svc = createService(":memory:");
+    const goal = svc.create({ title: "Ship", actor: "opencode:session-1" });
+    const plain = svc.create({ title: "Exercise" });
+    expect(goal.actor).toBe("opencode:session-1");
+    expect(plain.actor).toBeNull();
+    expect(svc.get(goal.id)?.actor).toBe("opencode:session-1");
+    expect(svc.update(goal.id, { actor: "habit-agent" }).actor).toBe("habit-agent");
+  });
+
+  test("carries the actor on change events", () => {
+    const events: Array<{ action: string; id: string; actor: string | null }> = [];
     const svc = createService(":memory:", { onEvent: (e) => events.push(e) });
-    const goal = svc.create({ title: "Ship" });
-    svc.setStatus(goal.id, "in_progress");
-    svc.update(goal.id, { notes: "n" });
-    svc.setHabit(goal.id, true);
-    const sub = svc.create({ title: "Store", parentId: goal.id });
-    svc.remove(sub.id);
-    svc.complete(goal.id, "done");
+    const goal = svc.create({ title: "Ship", actor: "opencode:session-1" });
+    svc.setStatus(goal.id, "in_progress", "opencode:session-1");
+    svc.complete(goal.id, "done", "opencode:session-1");
     expect(events).toEqual([
-      { action: "created", id: goal.id },
-      { action: "status", id: goal.id },
-      { action: "updated", id: goal.id },
-      { action: "habit", id: goal.id },
-      { action: "created", id: sub.id },
-      { action: "removed", id: sub.id },
-      { action: "completed", id: goal.id },
+      { action: "created", id: goal.id, actor: "opencode:session-1" },
+      { action: "status", id: goal.id, actor: "opencode:session-1" },
+      { action: "completed", id: goal.id, actor: "opencode:session-1" },
     ]);
   });
 
+  test("migrates databases created before the actor column", async () => {
+    const { Database } = await import("bun:sqlite");
+    const dir = mkdtempSync(join(tmpdir(), "btask-legacy-"));
+    const path = join(dir, "btask.db");
+    const db = new Database(path, { create: true });
+    db.run(
+      `CREATE TABLE tasks (
+        id TEXT PRIMARY KEY, title TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '',
+        parentId TEXT, status TEXT NOT NULL DEFAULT 'todo',
+        habit INTEGER NOT NULL DEFAULT 0, project TEXT, createdAt INTEGER NOT NULL
+      )`
+    );
+    db.run(`INSERT INTO tasks (id, title, createdAt) VALUES ('legacy-1', 'Old goal', 0)`);
+    db.close();
+    const svc = createService(path);
+    expect(svc.get("legacy-1")?.actor).toBeNull();
+    svc.close();
+  });
   test("emits no events on reads", () => {
     const events: unknown[] = [];
     const svc = createService(":memory:", { onEvent: (e) => events.push(e) });

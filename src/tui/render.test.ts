@@ -12,6 +12,7 @@ function node(id: string, title: string, status: "todo" | "in_progress" | "finis
       status,
       habit: false,
       project: null,
+      actor: null,
       createdAt: 0,
     },
     children,

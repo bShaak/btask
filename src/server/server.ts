@@ -73,7 +73,7 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
           }
           if (req.method === "PATCH") return patch(req, id);
           if (req.method === "DELETE") {
-            service.remove(id);
+            service.remove(id, url.searchParams.get("actor") ?? undefined);
             return json({ deleted: id });
           }
         } else if (route[0] === "tasks" && route.length === 3 && route[2] === "complete") {
@@ -95,7 +95,7 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
       async function create(req: Request): Promise<Response> {
         const parsed = await body(req);
         if (!parsed.ok) return parsed.res;
-        const { title, parentId, notes, habit, project } = parsed.value;
+        const { title, parentId, notes, habit, project, actor } = parsed.value;
         if (typeof title !== "string") return json({ error: "title is required" }, 400);
         try {
           const task = service.create({
@@ -104,6 +104,7 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
             notes: typeof notes === "string" ? notes : undefined,
             habit: typeof habit === "boolean" ? habit : undefined,
             project: typeof project === "string" ? project : undefined,
+            actor: typeof actor === "string" ? actor : undefined,
           });
           return json(task, 201);
         } catch (err) {
@@ -117,15 +118,17 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
         try {
           let task = service.get(id);
           if (!task) return json({ error: `task not found: ${id}` }, 404);
-          const { title, notes, status, habit } = parsed.value;
+          const { title, notes, status, habit, actor } = parsed.value;
+          const who = typeof actor === "string" ? actor : undefined;
           if (title !== undefined || notes !== undefined) {
             task = service.update(id, {
               title: typeof title === "string" ? title : undefined,
               notes: typeof notes === "string" ? notes : undefined,
+              actor: who,
             });
           }
-          if (status !== undefined) task = service.setStatus(id, status as Status);
-          if (habit !== undefined && typeof habit === "boolean") task = service.setHabit(id, habit);
+          if (status !== undefined) task = service.setStatus(id, status as Status, who);
+          if (habit !== undefined && typeof habit === "boolean") task = service.setHabit(id, habit, who);
           return json(task);
         } catch (err) {
           return failure(err);
@@ -136,8 +139,14 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
         const parsed = await body(req);
         if (!parsed.ok) return parsed.res;
         try {
-          const { summary } = parsed.value;
-          return json(service.complete(id, typeof summary === "string" ? summary : undefined));
+          const { summary, actor } = parsed.value;
+          return json(
+            service.complete(
+              id,
+              typeof summary === "string" ? summary : undefined,
+              typeof actor === "string" ? actor : undefined
+            )
+          );
         } catch (err) {
           return failure(err);
         }
@@ -147,9 +156,9 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
         const parsed = await body(req);
         if (!parsed.ok) return parsed.res;
         try {
-          const { habit } = parsed.value;
+          const { habit, actor } = parsed.value;
           if (typeof habit !== "boolean") return json({ error: "habit must be a boolean" }, 400);
-          return json(service.setHabit(id, habit));
+          return json(service.setHabit(id, habit, typeof actor === "string" ? actor : undefined));
         } catch (err) {
           return failure(err);
         }

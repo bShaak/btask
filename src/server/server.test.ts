@@ -104,6 +104,6 @@ describe("http server", () => {
       await new Promise((r) => setTimeout(r, 25));
     }
     ws.close();
-    expect(received).toEqual([{ action: "created", id: (received[0] as { id: string }).id }]);
+    expect(received).toEqual([{ action: "created", id: (received[0] as { id: string }).id, actor: null }]);
   });
 });
