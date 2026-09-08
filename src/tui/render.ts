@@ -26,6 +26,6 @@ export function render(tree: TaskNode[], selectedId: string | null, frame: numbe
   const lines = ["btask — today's goals", ""];
   const body = rows(tree, selectedId, frame);
   lines.push(...(body.length > 0 ? body : ["No tasks yet. Press a to add a goal."]));
-  lines.push("", "j/k navigate · a add sub-task · space status · x complete · q quit");
+  lines.push("", "j/k navigate · a add · space status · x complete · A archive · D delete · q quit");
   return lines.join("\n");
 }

@@ -20,6 +20,26 @@ btask habits
 
 This delegates to habitui's day summary and returns due-and-incomplete habits. `btask habits --local` reads btask's own habit flags instead.
 
+## Live updates: websocket
+
+`habitui serve` broadcasts `habit.completed` on `GET /api/v1/events` when a completion
+reaches the daily goal. `btask serve` subscribes automatically (`HABITUI_URL` selects
+the server, default `http://127.0.0.1:8080`) and re-runs the day sync for the event's
+date, so the daily goal and open TUIs update within a redraw. Unreachable server only
+logs and retries — the daemon keeps running.
+
+```bash
+btask habits watch --human
+```
+
+Same sync-on-event without the daemon: does an initial sync, then prints each event's
+sync result until interrupted. Discovery and actor rules match `habits sync`.
+
+Known limits of the habitui side: events fire only for completions through the serve
+API that reach the goal — CLI/TUI writes go straight to SQLite, partial progress and
+new/renamed habits emit nothing. Sync-on-event covers renames and new habits only when
+some goal-reaching completion triggers it; otherwise rerun `habits sync`.
+
 ## On completion: push
 
 When a habit is completed in the tracker, push it so open TUIs update instantly over WebSocket:

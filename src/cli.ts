@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { createService, type HabitReminder, type Task, type TaskNode } from "./api/service.ts";
 import { defaultArtifactDir, defaultDbPath, detectProject, ensureDirFor, portFilePath, resolveUrl } from "./lib/discovery.ts";
+import { habituiEventsUrl, subscribeHabitEvents } from "./lib/habit-events.ts";
 import { asClient, createRemoteService, probeDaemon, type AsyncService } from "./server/remote.ts";
 import { createServer } from "./server/server.ts";
 
@@ -74,6 +75,7 @@ btask archive <id> [--off] [--actor <name>] [--human]
 btask habits [--human] [--local] [--date YYYY-MM-DD]
 btask habits push --external-id <id> --title <text> --date YYYY-MM-DD --count <n> --goal <n> [--actor <name>]
 btask habits sync [--date YYYY-MM-DD] [--actor <name>]
+btask habits watch [--actor <name>] [--human]
 btask serve [--port <n>]
 btask context [--human]`;
 }
@@ -161,7 +163,31 @@ export async function run(argv: string[]): Promise<void> {
       if (human) console.log(renderTaskHuman(task));
       else console.log(JSON.stringify(task, null, 2));
     } else if (cmd === "habits") {
-      if (rest[0] === "sync") {
+      if (rest[0] === "watch") {
+        const actor = flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? "habitui";
+        await client.syncHabits(undefined, actor);
+        if (human) console.log(`watching ${habituiEventsUrl()}`);
+        const stop = subscribeHabitEvents(
+          (event) => {
+            client
+              .syncHabits(event.date, actor)
+              .then((result) => {
+                if (human) console.log(`${result.goal.title}: ${result.created} created, ${result.updated} updated`);
+                else console.log(JSON.stringify({ event, result }));
+              })
+              .catch((err) => console.error(err instanceof Error ? err.message : String(err)));
+          },
+          { onError: (err) => console.error(err) }
+        );
+        const shutdown = (): void => {
+          stop();
+          process.exit(0);
+        };
+        process.on("SIGINT", shutdown);
+        process.on("SIGTERM", shutdown);
+        leaveOpen = true;
+        return;
+      } else if (rest[0] === "sync") {
         const result = await client.syncHabits(
           flagValue(rest, "--date"),
           flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined
@@ -204,7 +230,18 @@ export async function run(argv: string[]): Promise<void> {
       if (!Number.isInteger(port) || port < 0) throw new Error(usage());
       const file = portFilePath();
       const srv = createServer(svc, { port, portFile: file });
+      const stopHabits = subscribeHabitEvents(
+        (event) => {
+          try {
+            svc.syncHabits(event.date, "habitui");
+          } catch (err) {
+            console.error(`habit sync failed for ${event.date}: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        },
+        { onError: (err) => console.error(err) }
+      );
       const shutdown = (): void => {
+        stopHabits();
         srv.stop();
         process.exit(0);
       };

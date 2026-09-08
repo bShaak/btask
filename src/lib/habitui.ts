@@ -23,8 +23,28 @@ export type DaySummary = {
 
 export type SummaryRunner = (date: string) => string;
 
+import { existsSync } from "node:fs";
+
+export function resolveHabituiBin(): string {
+  const configured = process.env["HABITUI_BIN"];
+  if (configured) return configured;
+  for (const dir of (process.env["PATH"] ?? "").split(":")) {
+    if (dir && existsSync(`${dir}/habitui`)) return "habitui";
+  }
+  const home = process.env["HOME"] ?? "";
+  const fallbacks = [
+    ...(home ? [`${home}/go/bin/habitui`, `${home}/.local/bin/habitui`] : []),
+    "/usr/local/bin/habitui",
+    "/usr/bin/habitui",
+  ];
+  for (const path of fallbacks) {
+    if (existsSync(path)) return path;
+  }
+  return "habitui";
+}
+
 export function defaultRunner(date: string): string {
-  const bin = process.env["HABITUI_BIN"] ?? "habitui";
+  const bin = resolveHabituiBin();
   let proc: { exitCode: number | null; stdout: Uint8Array; stderr: Uint8Array };
   try {
     proc = Bun.spawnSync([bin, "cli", "list", "--json", "--date", date], {

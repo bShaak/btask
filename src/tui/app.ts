@@ -31,6 +31,7 @@ export function start(options: { service: Service; stdin?: typeof process.stdin;
   let message = "";
   let adding = false;
   let buffer = "";
+  let confirmDelete = false;
 
   function ids(): string[] {
     return flatten(svc.list());
@@ -48,6 +49,7 @@ export function start(options: { service: Service; stdin?: typeof process.stdin;
   }
 
   function move(delta: number): void {
+    confirmDelete = false;
     const visible = ids();
     if (visible.length === 0) return;
     const index = visible.indexOf(selected as string);
@@ -56,6 +58,7 @@ export function start(options: { service: Service; stdin?: typeof process.stdin;
   }
 
   function cycle(): void {
+    confirmDelete = false;
     if (!selected) return;
     const task = svc.get(selected);
     if (!task) return;
@@ -64,6 +67,7 @@ export function start(options: { service: Service; stdin?: typeof process.stdin;
   }
 
   function complete(): void {
+    confirmDelete = false;
     if (!selected) return;
     const task = svc.get(selected);
     if (!task) return;
@@ -90,6 +94,26 @@ export function start(options: { service: Service; stdin?: typeof process.stdin;
       selected = sub.id;
     }
     message = "";
+  }
+
+  function removeSelected(): void {
+    if (!selected) return;
+    const task = svc.get(selected);
+    if (!task) return;
+    svc.remove(selected);
+    message = `deleted '${task.title}'`;
+    confirmDelete = false;
+    selected = null;
+  }
+
+  function toggleArchive(): void {
+    confirmDelete = false;
+    if (!selected) return;
+    const task = svc.get(selected);
+    if (!task) return;
+    svc.setArchived(selected, !task.archived);
+    message = task.archived ? `unarchived '${task.title}'` : `archived '${task.title}'`;
+    if (!task.archived) selected = null;
   }
 
   stdin.setRawMode(true);
@@ -130,11 +154,24 @@ export function start(options: { service: Service; stdin?: typeof process.stdin;
     else if (key === "k" || key === "\x1b[A") move(-1);
     else if (key === " ") cycle();
     else if (key === "x") complete();
-    else if (key === "a") {
+    else if (key === "A") toggleArchive();
+    else if (key === "D") {
+      if (confirmDelete) removeSelected();
+      else {
+        const task = selected ? svc.get(selected) : null;
+        if (!task) return;
+        confirmDelete = true;
+        message = `press D again to delete '${task.title}'`;
+      }
+    } else if (key === "a") {
+      confirmDelete = false;
       adding = true;
       buffer = "";
       message = "";
-    } else return;
+    } else {
+      confirmDelete = false;
+      return;
+    }
     draw();
   });
 
