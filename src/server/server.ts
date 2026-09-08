@@ -97,7 +97,7 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
       async function create(req: Request): Promise<Response> {
         const parsed = await body(req);
         if (!parsed.ok) return parsed.res;
-        const { title, parentId, notes, habit, project, actor } = parsed.value;
+          const { title, parentId, notes, habit, project, actor, externalId } = parsed.value;
         if (typeof title !== "string") return json({ error: "title is required" }, 400);
         try {
           const task = service.create({
@@ -107,6 +107,7 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
             habit: typeof habit === "boolean" ? habit : undefined,
             project: typeof project === "string" ? project : undefined,
             actor: typeof actor === "string" ? actor : undefined,
+            externalId: typeof externalId === "string" ? externalId : undefined,
           });
           return json(task, 201);
         } catch (err) {

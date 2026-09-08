@@ -11,7 +11,7 @@ import { defaultArtifactDir } from "../lib/discovery.ts";
 export type { HabitReminder };
 export type { Status, Task };
 export type TaskNode = { task: Task; children: TaskNode[] };
-export type CreateArgs = { title: string; notes?: string; parentId?: string; habit?: boolean; project?: string | null; actor?: string | null };
+export type CreateArgs = { title: string; notes?: string; parentId?: string; habit?: boolean; project?: string | null; actor?: string | null; externalId?: string | null };
 
 export type UpdateArgs = { title?: string; notes?: string; actor?: string | null };
 
@@ -100,6 +100,7 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
           habit: args.habit,
           project: args.project === undefined ? (parent?.project ?? null) : args.project,
           actor: args.actor ?? null,
+          externalId: args.externalId ?? null,
           createdAt: Date.now(),
         })
       );

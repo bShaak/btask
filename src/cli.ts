@@ -63,7 +63,7 @@ function renderContextHuman(tasks: Task[]): string[] {
 function usage(): string {
   return `btask list [--human] [--project <name>]
 btask get <id> [--human]
-btask create <title> [--parent <id>] [--notes <text>] [--habit] [--project <name>] [--actor <name>] [--human]
+btask create <title> [--parent <id>] [--notes <text>] [--habit] [--project <name>] [--actor <name>] [--external-id <id>] [--human]
 btask update <id> [--title <text>] [--notes <text>] [--actor <name>] [--human]
 btask delete <id> [--actor <name>]
 btask status <id> <todo|in_progress|finished> [--actor <name>] [--human]
@@ -109,6 +109,7 @@ export async function run(argv: string[]): Promise<void> {
         habit: hasFlag(rest, "--habit"),
         project: flagValue(rest, "--project") ?? (parentId ? undefined : detectProject()),
         actor: flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"],
+        externalId: flagValue(rest, "--external-id"),
       });
       if (human) console.log(`[ ] ${task.title} (${task.id.slice(0, 8)})`);
       else console.log(JSON.stringify(task, null, 2));
