@@ -2,6 +2,14 @@
 
 How an external habit tracker (e.g. habitui) keeps btask in sync. btask never owns streaks, schedules, or goals — it mirrors them.
 
+## Session start: sync
+
+```bash
+btask habits sync
+```
+
+Pulls the day summary, ensures a per-day `Daily habits YYYY-MM-DD` goal with one linked sub-task per due habit, pushes current counts, and archives prior open daily goals. Idempotent — reruns change nothing. `--date` overrides the day.
+
 ## Startup: pull
 
 On session start, read the current state (works offline, no daemon needed):
