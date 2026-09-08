@@ -162,6 +162,22 @@ describe("task service", () => {
     expect(() => svc.habitReminders("2026-09-07")).toThrow("habitui");
   });
 
+  test("defaults artifacts to the shared dir", () => {
+    const home = mkdtempSync(join(tmpdir(), "btask-home-"));
+    const saved = process.env["HOME"];
+    process.env["HOME"] = home;
+    try {
+      const svc = createService(":memory:");
+      const goal = svc.create({ title: "Ship" });
+      svc.complete(goal.id);
+      expect(readdirSync(join(home, ".btask", "artifacts")).length).toBe(1);
+      svc.close();
+    } finally {
+      if (saved === undefined) delete process.env["HOME"];
+      else process.env["HOME"] = saved;
+    }
+  });
+
   test("emits one change event per mutation", () => {
     const events: Array<{ action: string; id: string }> = [];
     const svc = createService(":memory:", { onEvent: (e) => events.push(e) });

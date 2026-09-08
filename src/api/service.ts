@@ -6,6 +6,7 @@ import {
   type HabitReminder,
   type SummaryRunner,
 } from "../lib/habitui.ts";
+import { defaultArtifactDir } from "../lib/discovery.ts";
 
 export type { HabitReminder };
 export type { Status, Task };
@@ -45,7 +46,7 @@ const VALID: ReadonlySet<string> = new Set(["todo", "in_progress", "finished"]);
 
 export function createService(path: string, options: ServiceOptions = {}): Service {
   const store = openStore(path);
-  const artifactDir = options.artifactDir ?? "artifacts";
+  const artifactDir = options.artifactDir ?? defaultArtifactDir();
   const now = options.now ?? Date.now;
   const listeners = new Set<(event: TaskEvent) => void>();
   if (options.onEvent) listeners.add(options.onEvent);

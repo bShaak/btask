@@ -1,8 +1,11 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { createService, type HabitReminder, type Task, type TaskNode } from "./api/service.ts";
-import { defaultDbPath, detectProject, ensureDirFor, portFilePath } from "./lib/discovery.ts";
+import { defaultDbPath, detectProject, ensureDirFor, portFilePath, resolveUrl } from "./lib/discovery.ts";
+import { asClient, createRemoteService, probeDaemon, type AsyncService } from "./server/remote.ts";
 import { createServer } from "./server/server.ts";
+
+const MUTATIONS = new Set(["create", "update", "delete", "status", "complete", "habit"]);
 
 function dbPath(): string {
   return defaultDbPath();
@@ -70,12 +73,17 @@ btask serve [--port <n>]
 btask context [--human]`;
 }
 
-export function run(argv: string[]): void {
+export async function run(argv: string[]): Promise<void> {
   const [cmd, ...rest] = argv;
   const human = hasFlag(rest, "--human");
   const svc = ensureService();
   let leaveOpen = false;
+  let remote: AsyncService | null = null;
   try {
+    const client: AsyncService =
+      cmd !== undefined && MUTATIONS.has(cmd) && (await probeDaemon(resolveUrl()))
+        ? (remote = createRemoteService(resolveUrl()))
+        : asClient(svc);
     if (cmd === "list") {
       const project = flagValue(rest, "--project");
       const tree = svc.list(project === undefined ? undefined : { project });
@@ -92,7 +100,7 @@ export function run(argv: string[]): void {
       const title = rest.find((a) => !a.startsWith("-"));
       if (!title) throw new Error(usage());
       const parentId = flagValue(rest, "--parent");
-      const task = svc.create({
+      const task = await client.create({
         title,
         parentId,
         notes: flagValue(rest, "--notes"),
@@ -104,7 +112,7 @@ export function run(argv: string[]): void {
     } else if (cmd === "update") {
       const [id] = rest.filter((a) => !a.startsWith("-"));
       if (!id) throw new Error(usage());
-      const task = svc.update(id, {
+      const task = await client.update(id, {
         title: flagValue(rest, "--title"),
         notes: flagValue(rest, "--notes"),
       });
@@ -113,20 +121,20 @@ export function run(argv: string[]): void {
     } else if (cmd === "delete") {
       const [id] = rest.filter((a) => !a.startsWith("-"));
       if (!id) throw new Error(usage());
-      svc.remove(id);
+      await client.remove(id);
       if (human) console.log(`deleted ${id.slice(0, 8)}`);
       else console.log(JSON.stringify({ deleted: id }));
     } else if (cmd === "complete") {
       const [id] = rest.filter((a) => !a.startsWith("-"));
       if (!id) throw new Error(usage());
-      const task = svc.complete(id, flagValue(rest, "--summary"));
+      const task = await client.complete(id, flagValue(rest, "--summary"));
       if (human) console.log(`[x] ${task.title} (${task.id.slice(0, 8)})`);
       else console.log(JSON.stringify(task, null, 2));
     } else if (cmd === "habit") {
       const positional = rest.filter((a) => !a.startsWith("-"));
       const [id, value] = positional;
       if (!id || (value !== "on" && value !== "off")) throw new Error(usage());
-      const task = svc.setHabit(id, value === "on");
+      const task = await client.setHabit(id, value === "on");
       if (human) console.log(renderTaskHuman(task));
       else console.log(JSON.stringify(task, null, 2));
     } else if (cmd === "habits") {
@@ -161,20 +169,21 @@ export function run(argv: string[]): void {
       const positional = rest.filter((a) => !a.startsWith("-"));
       const [id, status] = positional;
       if (!id || !status) throw new Error(usage());
-      const task = svc.setStatus(id, status as "todo" | "in_progress" | "finished");
+      const task = await client.setStatus(id, status as "todo" | "in_progress" | "finished");
       if (human) console.log(`${task.status} ${task.title} (${task.id.slice(0, 8)})`);
       else console.log(JSON.stringify(task, null, 2));
     } else {
       throw new Error(usage());
     }
   } finally {
-    if (!leaveOpen) svc.close();
+    if (remote) await remote.close();
+    else if (!leaveOpen) svc.close();
   }
 }
 
 if (import.meta.main) {
   try {
-    run(process.argv.slice(2));
+    await run(process.argv.slice(2));
   } catch (err) {
     console.error(err instanceof Error ? err.message : String(err));
     process.exit(1);

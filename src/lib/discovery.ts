@@ -14,6 +14,11 @@ export function defaultDbPath(): string {
   return join(homeDir(), ".btask", "btask.db");
 }
 
+export function defaultArtifactDir(): string {
+  if (process.env["BTASK_ARTIFACTS"]) return process.env["BTASK_ARTIFACTS"] as string;
+  return join(homeDir(), ".btask", "artifacts");
+}
+
 export function portFilePath(): string {
   return join(homeDir(), ".btask", "btask.port");
 }
