@@ -73,6 +73,7 @@ btask habit <id> <on|off> [--actor <name>] [--human]
 btask archive <id> [--off] [--actor <name>] [--human]
 btask habits [--human] [--local] [--date YYYY-MM-DD]
 btask habits push --external-id <id> --title <text> --date YYYY-MM-DD --count <n> --goal <n> [--actor <name>]
+btask habits sync [--date YYYY-MM-DD] [--actor <name>]
 btask serve [--port <n>]
 btask context [--human]`;
 }
@@ -160,7 +161,17 @@ export async function run(argv: string[]): Promise<void> {
       if (human) console.log(renderTaskHuman(task));
       else console.log(JSON.stringify(task, null, 2));
     } else if (cmd === "habits") {
-      if (rest[0] === "push") {
+      if (rest[0] === "sync") {
+        const result = await client.syncHabits(
+          flagValue(rest, "--date"),
+          flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined
+        );
+        if (human) {
+          console.log(
+            `${result.goal.title}: ${result.created} created, ${result.updated} updated, ${result.archived.length} archived`
+          );
+        } else console.log(JSON.stringify(result, null, 2));
+      } else if (rest[0] === "push") {
         const count = Number(flagValue(rest, "--count"));
         const goal = Number(flagValue(rest, "--goal"));
         const externalId = flagValue(rest, "--external-id") ?? "";

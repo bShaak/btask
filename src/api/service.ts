@@ -1,6 +1,7 @@
 import { openStore, type Status, type Task } from "../lib/tasks.ts";
 import { writeArtifact } from "../lib/artifacts.ts";
 import {
+  fetchDaySummary,
   incompleteReminders,
   todayLocal,
   type HabitReminder,
@@ -25,6 +26,13 @@ export type HabitCompletion = {
   goal: number;
   actor?: string | null;
 };
+
+export type HabitSyncResult = {
+  goal: Task;
+  created: number;
+  updated: number;
+  archived: string[];
+};
 export type TaskEventAction = "created" | "updated" | "status" | "removed" | "completed" | "habit" | "archived";
 export type TaskEvent = { action: TaskEventAction; id: string; actor: string | null };
 
@@ -46,6 +54,7 @@ export type Service = {
   setHabit: (id: string, habit: boolean, actor?: string | null) => Task;
   setArchived: (id: string, archived: boolean, actor?: string | null) => Task;
   recordHabitCompletion: (args: HabitCompletion) => Task;
+  syncHabits: (date?: string, actor?: string | null) => HabitSyncResult;
   habits: () => Task[];
   habitReminders: (date?: string) => HabitReminder[];
   subscribe: (listener: (event: TaskEvent) => void) => () => void;
@@ -78,6 +87,41 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
       }
     }
     return found;
+  }
+
+  function pushHabitCompletion(args: HabitCompletion): Task {
+    if (!args.externalId) throw new Error("externalId is required");
+    const title = args.title.trim();
+    if (!title) throw new Error("title is required");
+    const actor = args.actor ?? null;
+    let task = store.byExternalId(args.externalId);
+    if (!task) {
+      task = created(
+        store.create({
+          id: crypto.randomUUID(),
+          title,
+          habit: true,
+          externalId: args.externalId,
+          actor,
+          createdAt: Date.now(),
+        })
+      );
+    } else if (task.title !== title) {
+      task = store.update(task.id, { title, notes: task.notes }) as Task;
+    }
+    const met = args.completionCount >= Math.max(1, args.goal);
+    const ORDER: Record<Status, number> = { todo: 0, in_progress: 1, finished: 2 };
+    const next: Status = met ? "finished" : args.completionCount > 0 ? "in_progress" : "todo";
+    if ((ORDER[next] as number) > (ORDER[task.status] as number)) {
+      return setStatusById(task.id, next, actor);
+    }
+    return task;
+  }
+
+  function setStatusById(id: string, status: Status, actor: string | null): Task {
+    const next = store.setStatus(id, status) as Task;
+    emit("status", id, actor);
+    return next;
   }
   const created = (task: Task): Task => {
     emit("created", task.id, task.actor);
@@ -132,9 +176,7 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
       if (!VALID.has(status)) throw new Error(`invalid status: ${status}`);
       const existing = store.get(id);
       if (!existing) throw new Error(`task not found: ${id}`);
-      const next = store.setStatus(id, status) as Task;
-      emit("status", id, actor);
-      return next;
+      return setStatusById(id, status, actor);
     },
     update(id, patch) {
       const existing = store.get(id);
@@ -187,36 +229,70 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
     habits() {
       return store.listAll().filter((t) => t.habit && t.status !== "finished");
     },
-    recordHabitCompletion(args) {
-      if (!args.externalId) throw new Error("externalId is required");
-      const title = args.title.trim();
-      if (!title) throw new Error("title is required");
-      const actor = args.actor ?? null;
-      let task = store.byExternalId(args.externalId);
-      if (!task) {
-        task = created(
+    recordHabitCompletion(args: HabitCompletion): Task {
+      return pushHabitCompletion(args);
+    },
+    habitReminders(date = todayLocal()) {
+      return incompleteReminders(date, options.habitSummary);
+    },
+    syncHabits(date = todayLocal(), actor = null) {
+      const summary = fetchDaySummary(date, options.habitSummary);
+      let goal = store.byExternalId(`habitui:daily-${summary.date}`);
+      if (!goal) {
+        goal = created(
           store.create({
             id: crypto.randomUUID(),
-            title,
-            habit: true,
-            externalId: args.externalId,
+            title: `Daily habits ${summary.date}`,
+            externalId: `habitui:daily-${summary.date}`,
             actor,
             createdAt: Date.now(),
           })
         );
-      } else if (task.title !== title) {
-        task = store.update(task.id, { title, notes: task.notes }) as Task;
       }
-      const met = args.completionCount >= Math.max(1, args.goal);
-      const ORDER: Record<Status, number> = { todo: 0, in_progress: 1, finished: 2 };
-      const next: Status = met ? "finished" : args.completionCount > 0 ? "in_progress" : "todo";
-      if (ORDER[next] as number > (ORDER[task.status] as number)) {
-        return this.setStatus(task.id, next, actor);
+      let createdCount = 0;
+      let updated = 0;
+      for (const habit of summary.habits.filter((h) => h.due)) {
+        const externalId = `habitui:${habit.id}@${summary.date}`;
+        const before = store.byExternalId(externalId);
+        if (!before) {
+          const sub = store.create({
+            id: crypto.randomUUID(),
+            title: habit.name,
+            parentId: goal.id,
+            habit: true,
+            externalId,
+            actor,
+            createdAt: Date.now(),
+          });
+          emit("created", sub.id, actor);
+          createdCount += 1;
+        }
+        const before2 = store.byExternalId(externalId) as Task;
+        const statusBefore = before2.status;
+        pushHabitCompletion({
+          externalId,
+          title: habit.name,
+          date: summary.date,
+          completionCount: habit.completion_count,
+          goal: habit.goal,
+          actor,
+        });
+        if ((store.byExternalId(externalId) as Task).status !== statusBefore) updated += 1;
       }
-      return task;
-    },
-    habitReminders(date = todayLocal()) {
-      return incompleteReminders(date, options.habitSummary);
+      const archived: string[] = [];
+      for (const task of store.listAll()) {
+        if (
+          task.externalId?.startsWith("habitui:daily-") &&
+          task.externalId !== `habitui:daily-${summary.date}` &&
+          !task.archived &&
+          task.status !== "finished"
+        ) {
+          store.setArchived(task.id, true);
+          emit("archived", task.id, actor);
+          archived.push(task.id);
+        }
+      }
+      return { goal, created: createdCount, updated, archived };
     },
     subscribe(listener) {
       listeners.add(listener);

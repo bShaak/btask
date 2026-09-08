@@ -8,7 +8,7 @@ export type AsyncService = {
 
 export function asClient(svc: Service): AsyncService {
   const client = {} as Record<string, (...args: never[]) => Promise<unknown>>;
-  for (const key of ["create", "get", "list", "setStatus", "update", "remove", "complete", "setHabit", "setArchived", "habits", "habitReminders", "recordHabitCompletion", "context"] as const) {
+  for (const key of ["create", "get", "list", "setStatus", "update", "remove", "complete", "setHabit", "setArchived", "habits", "habitReminders", "recordHabitCompletion", "syncHabits", "context"] as const) {
     client[key] = async (...args: never[]) =>
       (svc[key] as (...a: never[]) => unknown)(...args);
   }
@@ -106,6 +106,12 @@ export function createRemoteService(baseUrl: string): AsyncService {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(args),
+      }) as Promise<never>,
+    syncHabits: (date, actor) =>
+      request("/api/v1/habits/sync", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ date, actor }),
       }) as Promise<never>,
     habitReminders: (date) =>
       request(`/api/v1/habits${date ? `?date=${encodeURIComponent(date)}` : ""}`) as Promise<never>,

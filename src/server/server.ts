@@ -96,6 +96,8 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
           return json(service.habits());
         } else if (route[0] === "habits" && route.length === 2 && route[1] === "completions") {
           if (req.method === "POST") return pushCompletion(req);
+        } else if (route[0] === "habits" && route.length === 2 && route[1] === "sync") {
+          if (req.method === "POST") return sync(req);
         }
         return json({ error: "not found" }, 404);
       } catch (err) {
@@ -212,6 +214,22 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
           const { archived, actor } = parsed.value;
           if (typeof archived !== "boolean") return json({ error: "archived must be a boolean" }, 400);
           return json(service.setArchived(id, archived, typeof actor === "string" ? actor : undefined));
+        } catch (err) {
+          return failure(err);
+        }
+      }
+
+      async function sync(req: Request): Promise<Response> {
+        const parsed = await body(req);
+        if (!parsed.ok) return parsed.res;
+        try {
+          const { date, actor } = parsed.value;
+          return json(
+            service.syncHabits(
+              typeof date === "string" ? date : undefined,
+              typeof actor === "string" ? actor : undefined
+            )
+          );
         } catch (err) {
           return failure(err);
         }

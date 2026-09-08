@@ -328,6 +328,50 @@ describe("task service", () => {
     svc.close();
   });
 
+  test("syncs due habits into a per-day goal", () => {
+    const svc = createService(":memory:", {
+      habitSummary: (date) =>
+        JSON.stringify({
+          date,
+          habits: [
+            { id: 1, name: "Stretch", goal: 1, due: true, complete: false, completion_count: 0 },
+            { id: 2, name: "Someday", goal: 1, due: false, complete: false, completion_count: 0 },
+          ],
+        }),
+    });
+    const first = svc.syncHabits("2026-09-08", "habit-agent");
+    expect(first.goal.title).toBe("Daily habits 2026-09-08");
+    expect(first.goal.externalId).toBe("habitui:daily-2026-09-08");
+    expect(first.created).toBe(1);
+    const tree = svc.list();
+    expect(tree.length).toBe(1);
+    expect(tree[0]?.children.map((c) => c.task.title)).toEqual(["Stretch"]);
+    const second = svc.syncHabits("2026-09-08", "habit-agent");
+    expect(second.goal.id).toBe(first.goal.id);
+    expect(second.created).toBe(0);
+  });
+
+  test("sync archives prior open daily goals and leaves finished ones", () => {
+    const svc = createService(":memory:", {
+      habitSummary: (date) =>
+        JSON.stringify({
+          date,
+          habits: [{ id: 1, name: "Stretch", goal: 1, due: true, complete: false, completion_count: 0 }],
+        }),
+    });
+    const yesterday = svc.syncHabits("2026-09-07");
+    const finished = svc.create({ title: "Daily habits 2026-09-06", externalId: "habitui:daily-2026-09-06" });
+    svc.setStatus(finished.id, "finished");
+    const today = svc.syncHabits("2026-09-08");
+    expect(svc.get(yesterday.goal.id)?.archived).toBe(true);
+    expect(svc.get(finished.id)?.archived).toBe(false);
+    expect(svc.list().map((n) => n.task.title)).toEqual([
+      "Daily habits 2026-09-06",
+      "Daily habits 2026-09-08",
+    ]);
+    expect(today.archived).toEqual([yesterday.goal.id]);
+  });
+
   test("rejects habit pushes without identity", () => {
     const svc = createService(":memory:");
     expect(() =>

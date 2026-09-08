@@ -45,8 +45,12 @@ export function defaultRunner(date: string): string {
   return proc.stdout.toString();
 }
 
+export function fetchDaySummary(date: string, run: SummaryRunner = defaultRunner): DaySummary {
+  return JSON.parse(run(date)) as DaySummary;
+}
+
 export function incompleteReminders(date: string, run: SummaryRunner = defaultRunner): HabitReminder[] {
-  const summary = JSON.parse(run(date)) as DaySummary;
+  const summary = fetchDaySummary(date, run);
   return summary.habits
     .filter((h) => h.due && !h.complete)
     .map((h) => ({
