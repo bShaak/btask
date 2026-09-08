@@ -5,7 +5,7 @@ import { defaultDbPath, detectProject, ensureDirFor, portFilePath, resolveUrl } 
 import { asClient, createRemoteService, probeDaemon, type AsyncService } from "./server/remote.ts";
 import { createServer } from "./server/server.ts";
 
-const MUTATIONS = new Set(["create", "update", "delete", "status", "complete", "habit", "habits"]);
+const MUTATIONS = new Set(["create", "update", "delete", "status", "complete", "habit", "habits", "archive"]);
 
 function dbPath(): string {
   return defaultDbPath();
@@ -46,7 +46,8 @@ function renderTaskHuman(task: Task): string {
   const mark = task.status === "finished" ? "[x]" : task.status === "in_progress" ? "[~]" : "[ ]";
   const notes = task.notes ? `\n  notes: ${task.notes}` : "";
   const actor = task.actor ? ` @${task.actor}` : "";
-  return `${mark} ${task.title} (${task.id.slice(0, 8)}) [${task.status}]${actor}${notes}`;
+  const archived = task.archived ? " [archived]" : "";
+  return `${mark} ${task.title} (${task.id.slice(0, 8)}) [${task.status}]${actor}${archived}${notes}`;
 }
 
 function renderRemindersHuman(reminders: HabitReminder[]): string[] {
@@ -61,7 +62,7 @@ function renderContextHuman(tasks: Task[]): string[] {
 }
 
 function usage(): string {
-  return `btask list [--human] [--project <name>]
+  return `btask list [--human] [--project <name>] [--archived|--all]
 btask get <id> [--human]
 btask create <title> [--parent <id>] [--notes <text>] [--habit] [--project <name>] [--actor <name>] [--external-id <id>] [--human]
 btask update <id> [--title <text>] [--notes <text>] [--actor <name>] [--human]
@@ -69,6 +70,7 @@ btask delete <id> [--actor <name>]
 btask status <id> <todo|in_progress|finished> [--actor <name>] [--human]
 btask complete <id> [--summary <text>] [--actor <name>] [--human]
 btask habit <id> <on|off> [--actor <name>] [--human]
+btask archive <id> [--off] [--actor <name>] [--human]
 btask habits [--human] [--local] [--date YYYY-MM-DD]
 btask habits push --external-id <id> --title <text> --date YYYY-MM-DD --count <n> --goal <n> [--actor <name>]
 btask serve [--port <n>]
@@ -88,7 +90,8 @@ export async function run(argv: string[]): Promise<void> {
         : asClient(svc);
     if (cmd === "list") {
       const project = flagValue(rest, "--project");
-      const tree = svc.list(project === undefined ? undefined : { project });
+      const archived = hasFlag(rest, "--all") ? "all" : hasFlag(rest, "--archived") ? "archived" : undefined;
+      const tree = svc.list({ ...(project === undefined ? {} : { project }), ...(archived === undefined ? {} : { archived }) });
       if (human) console.log(renderHuman(tree).join("\n"));
       else console.log(JSON.stringify(tree, null, 2));
     } else if (cmd === "get") {
@@ -148,6 +151,12 @@ export async function run(argv: string[]): Promise<void> {
         value === "on",
         flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined
       );
+      if (human) console.log(renderTaskHuman(task));
+      else console.log(JSON.stringify(task, null, 2));
+    } else if (cmd === "archive") {
+      const [id] = rest.filter((a) => !a.startsWith("-"));
+      if (!id) throw new Error(usage());
+      const task = await client.setArchived(id, !hasFlag(rest, "--off"), flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined);
       if (human) console.log(renderTaskHuman(task));
       else console.log(JSON.stringify(task, null, 2));
     } else if (cmd === "habits") {

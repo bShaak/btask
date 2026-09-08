@@ -268,6 +268,66 @@ describe("task service", () => {
     expect(task.status).toBe("todo");
   });
 
+  test("archives and unarchives tasks", () => {
+    const svc = createService(":memory:");
+    const goal = svc.create({ title: "Ship" });
+    expect(goal.archived).toBe(false);
+    expect(svc.setArchived(goal.id, true).archived).toBe(true);
+    expect(svc.list()).toEqual([]);
+    expect(svc.list({ archived: "archived" }).map((n) => n.task.id)).toEqual([goal.id]);
+    expect(svc.list({ archived: "all" }).map((n) => n.task.id)).toEqual([goal.id]);
+    expect(svc.setArchived(goal.id, false).archived).toBe(false);
+    expect(svc.list().map((n) => n.task.id)).toEqual([goal.id]);
+    expect(() => svc.setArchived("nope", true)).toThrow();
+  });
+
+  test("archiving a goal hides its subtree and unarchiving restores it", () => {
+    const svc = createService(":memory:");
+    const goal = svc.create({ title: "Ship" });
+    svc.create({ title: "Store", parentId: goal.id });
+    svc.setArchived(goal.id, true);
+    expect(svc.list()).toEqual([]);
+    expect(svc.list({ archived: "all" })[0]?.children.length).toBe(1);
+    svc.setArchived(goal.id, false);
+    expect(svc.list()[0]?.children.length).toBe(1);
+  });
+
+  test("completing an archived task keeps the marker and emits with actor", () => {
+    const events: Array<{ action: string; id: string; actor: string | null }> = [];
+    const svc = createService(":memory:", { onEvent: (e) => events.push(e) });
+    const goal = svc.create({ title: "Ship" });
+    events.length = 0;
+    svc.setArchived(goal.id, true, "opencode:s1");
+    const done = svc.complete(goal.id, "v1", "opencode:s1");
+    expect(done.status).toBe("finished");
+    expect(svc.get(goal.id)?.archived).toBe(true);
+    expect(events).toEqual([
+      { action: "archived", id: goal.id, actor: "opencode:s1" },
+      { action: "completed", id: goal.id, actor: "opencode:s1" },
+    ]);
+  });
+
+  test("migrates databases created before the archived column", async () => {
+    const { Database } = await import("bun:sqlite");
+    const dir = mkdtempSync(join(tmpdir(), "btask-legacy-"));
+    const path = join(dir, "btask.db");
+    const db = new Database(path, { create: true });
+    db.run(
+      `CREATE TABLE tasks (
+        id TEXT PRIMARY KEY, title TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '',
+        parentId TEXT, status TEXT NOT NULL DEFAULT 'todo',
+        habit INTEGER NOT NULL DEFAULT 0, project TEXT, actor TEXT,
+        externalId TEXT, createdAt INTEGER NOT NULL
+      )`
+    );
+    db.run(`INSERT INTO tasks (id, title, createdAt) VALUES ('legacy-1', 'Old goal', 0)`);
+    db.close();
+    const svc = createService(path);
+    expect(svc.get("legacy-1")?.archived).toBe(false);
+    expect(svc.list().map((n) => n.task.id)).toEqual(["legacy-1"]);
+    svc.close();
+  });
+
   test("rejects habit pushes without identity", () => {
     const svc = createService(":memory:");
     expect(() =>

@@ -15,7 +15,7 @@ export type CreateArgs = { title: string; notes?: string; parentId?: string; hab
 
 export type UpdateArgs = { title?: string; notes?: string; actor?: string | null };
 
-export type ListFilter = { project?: string };
+export type ListFilter = { project?: string; archived?: "active" | "archived" | "all" };
 
 export type HabitCompletion = {
   externalId: string;
@@ -25,7 +25,7 @@ export type HabitCompletion = {
   goal: number;
   actor?: string | null;
 };
-export type TaskEventAction = "created" | "updated" | "status" | "removed" | "completed" | "habit";
+export type TaskEventAction = "created" | "updated" | "status" | "removed" | "completed" | "habit" | "archived";
 export type TaskEvent = { action: TaskEventAction; id: string; actor: string | null };
 
 export type ServiceOptions = {
@@ -44,6 +44,7 @@ export type Service = {
   remove: (id: string, actor?: string | null) => void;
   complete: (id: string, summary?: string, actor?: string | null) => Task;
   setHabit: (id: string, habit: boolean, actor?: string | null) => Task;
+  setArchived: (id: string, archived: boolean, actor?: string | null) => Task;
   recordHabitCompletion: (args: HabitCompletion) => Task;
   habits: () => Task[];
   habitReminders: (date?: string) => HabitReminder[];
@@ -108,11 +109,11 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
     get(id) {
       return store.get(id);
     },
-    list(filter = {}) {
-      const tasks =
-        filter.project === undefined
-          ? store.listAll()
-          : store.listAll().filter((t) => t.project === filter.project);
+    list(filter: ListFilter = {}) {
+      let tasks = store.listAll();
+      if (filter.project !== undefined) tasks = tasks.filter((t) => t.project === filter.project);
+      const mode = filter.archived ?? "active";
+      if (mode !== "all") tasks = tasks.filter((t) => t.archived === (mode === "archived"));
       const byParent = new Map<string | null, Task[]>();
       for (const t of tasks) {
         const key = t.parentId ?? null;
@@ -174,6 +175,13 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
       if (!existing) throw new Error(`task not found: ${id}`);
       const next = store.setHabit(id, habit) as Task;
       emit("habit", id, actor);
+      return next;
+    },
+    setArchived(id, archived, actor = null) {
+      const existing = store.get(id);
+      if (!existing) throw new Error(`task not found: ${id}`);
+      const next = store.setArchived(id, archived) as Task;
+      emit("archived", id, actor);
       return next;
     },
     habits() {

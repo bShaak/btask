@@ -61,7 +61,13 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
         if (route[0] === "tasks" && route.length === 1) {
           if (req.method === "GET") {
             const project = url.searchParams.get("project") ?? undefined;
-            return json(service.list(project === undefined ? undefined : { project }));
+            const archived = url.searchParams.get("archived");
+            return json(
+              service.list({
+                ...(project === undefined ? {} : { project }),
+                ...(archived === "archived" || archived === "all" ? { archived } : {}),
+              })
+            );
           }
           if (req.method === "POST") return create(req);
         } else if (route[0] === "tasks" && route.length === 2) {
@@ -80,6 +86,8 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
           if (req.method === "POST") return complete(req, route[1] as string);
         } else if (route[0] === "tasks" && route.length === 3 && route[2] === "habit") {
           if (req.method === "POST") return habit(req, route[1] as string);
+        } else if (route[0] === "tasks" && route.length === 3 && route[2] === "archive") {
+          if (req.method === "POST") return archive(req, route[1] as string);
         } else if (route[0] === "context" && route.length === 1 && req.method === "GET") {
           return json(service.context());
         } else if (route[0] === "habits" && route.length === 1 && req.method === "GET") {
@@ -192,6 +200,18 @@ export function createServer(service: Service, options: ServerOptions = {}): Run
             }),
             201
           );
+        } catch (err) {
+          return failure(err);
+        }
+      }
+
+      async function archive(req: Request, id: string): Promise<Response> {
+        const parsed = await body(req);
+        if (!parsed.ok) return parsed.res;
+        try {
+          const { archived, actor } = parsed.value;
+          if (typeof archived !== "boolean") return json({ error: "archived must be a boolean" }, 400);
+          return json(service.setArchived(id, archived, typeof actor === "string" ? actor : undefined));
         } catch (err) {
           return failure(err);
         }

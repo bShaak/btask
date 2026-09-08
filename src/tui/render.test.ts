@@ -14,6 +14,7 @@ function node(id: string, title: string, status: "todo" | "in_progress" | "finis
       project: null,
       actor: null,
       externalId: null,
+      archived: false,
       createdAt: 0,
     },
     children,

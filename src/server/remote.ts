@@ -8,7 +8,7 @@ export type AsyncService = {
 
 export function asClient(svc: Service): AsyncService {
   const client = {} as Record<string, (...args: never[]) => Promise<unknown>>;
-  for (const key of ["create", "get", "list", "setStatus", "update", "remove", "complete", "setHabit", "habits", "habitReminders", "recordHabitCompletion", "context"] as const) {
+  for (const key of ["create", "get", "list", "setStatus", "update", "remove", "complete", "setHabit", "setArchived", "habits", "habitReminders", "recordHabitCompletion", "context"] as const) {
     client[key] = async (...args: never[]) =>
       (svc[key] as (...a: never[]) => unknown)(...args);
   }
@@ -59,8 +59,13 @@ export function createRemoteService(baseUrl: string): AsyncService {
   const client: AsyncService = {
     create: (args) => send("POST", args) as Promise<never>,
     get: (id) => request(`/api/v1/tasks/${id}`) as Promise<never>,
-    list: (filter) =>
-      request(`/api/v1/tasks${filter?.project ? `?project=${encodeURIComponent(filter.project)}` : ""}`) as Promise<never>,
+    list: (filter) => {
+      const params = new URLSearchParams();
+      if (filter?.project) params.set("project", filter.project);
+      if (filter?.archived && filter.archived !== "active") params.set("archived", filter.archived);
+      const query = params.size > 0 ? `?${params.toString()}` : "";
+      return request(`/api/v1/tasks${query}`) as Promise<never>;
+    },
     setStatus: (id, status, actor) =>
       request(`/api/v1/tasks/${id}`, {
         method: "PATCH",
@@ -88,6 +93,12 @@ export function createRemoteService(baseUrl: string): AsyncService {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ habit, actor }),
+      }) as Promise<never>,
+    setArchived: (id, archived, actor) =>
+      request(`/api/v1/tasks/${id}/archive`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ archived, actor }),
       }) as Promise<never>,
     habits: () => request("/api/v1/habits/local") as Promise<never>,
     recordHabitCompletion: (args) =>

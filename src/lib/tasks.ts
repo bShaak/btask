@@ -12,6 +12,7 @@ export type Task = {
   project: string | null;
   actor: string | null;
   externalId: string | null;
+  archived: boolean;
   createdAt: number;
 };
 
@@ -33,6 +34,7 @@ export type TaskStore = {
   setStatus: (id: string, status: Status) => Task | null;
   update: (id: string, patch: { title: string; notes: string; actor?: string | null }) => Task | null;
   setHabit: (id: string, habit: boolean) => Task | null;
+  setArchived: (id: string, archived: boolean) => Task | null;
   remove: (id: string) => void;
   close: () => void;
 };
@@ -52,6 +54,7 @@ export function openStore(path: string): TaskStore {
       project TEXT,
       actor TEXT,
       externalId TEXT,
+      archived INTEGER NOT NULL DEFAULT 0,
       createdAt INTEGER NOT NULL
     )`
   );
@@ -61,6 +64,7 @@ export function openStore(path: string): TaskStore {
   if (!columns.includes("project")) db.run(`ALTER TABLE tasks ADD COLUMN project TEXT`);
   if (!columns.includes("actor")) db.run(`ALTER TABLE tasks ADD COLUMN actor TEXT`);
   if (!columns.includes("externalId")) db.run(`ALTER TABLE tasks ADD COLUMN externalId TEXT`);
+  if (!columns.includes("archived")) db.run(`ALTER TABLE tasks ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`);
   const insert = db.prepare(
     `INSERT INTO tasks (id, title, notes, parentId, status, habit, project, actor, externalId, createdAt)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -71,6 +75,7 @@ export function openStore(path: string): TaskStore {
   const updateStatus = db.prepare(`UPDATE tasks SET status = ? WHERE id = ?`);
   const updateFields = db.prepare(`UPDATE tasks SET title = ?, notes = ?, actor = ? WHERE id = ?`);
   const updateHabit = db.prepare(`UPDATE tasks SET habit = ? WHERE id = ?`);
+  const updateArchived = db.prepare(`UPDATE tasks SET archived = ? WHERE id = ?`);
   const deleteById = db.prepare(`DELETE FROM tasks WHERE id = ?`);
 
   function rowToTask(row: Record<string, unknown>): Task {
@@ -85,6 +90,7 @@ export function openStore(path: string): TaskStore {
       project: row["project"] == null ? null : String(row["project"]),
       actor: row["actor"] == null ? null : String(row["actor"]),
       externalId: row["externalId"] == null ? null : String(row["externalId"]),
+      archived: Number(row["archived"] ?? 0) === 1,
       createdAt: Number(row["createdAt"] ?? 0),
     };
   }
@@ -127,6 +133,10 @@ export function openStore(path: string): TaskStore {
     },
     setHabit(id, habit) {
       updateHabit.run(habit ? 1 : 0, id);
+      return this.get(id);
+    },
+    setArchived(id, archived) {
+      updateArchived.run(archived ? 1 : 0, id);
       return this.get(id);
     },
     remove(id) {
