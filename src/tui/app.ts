@@ -65,8 +65,15 @@ export function start(options: { service: Service; stdin?: typeof process.stdin;
 
   function complete(): void {
     if (!selected) return;
-    svc.complete(selected);
-    message = "goal completed — summary artifact written";
+    const task = svc.get(selected);
+    if (!task) return;
+    if (task.parentId === null) {
+      svc.complete(selected);
+      message = "goal completed — summary artifact written";
+    } else {
+      svc.setStatus(selected, "finished");
+      message = "sub-task finished";
+    }
   }
 
   function confirmAdd(): void {
