@@ -19,6 +19,6 @@ Single-context layout (`CONTEXT.md` + `docs/adr/`). See `docs/agents/domain.md`.
 Track multi-step work in btask so progress survives across threads. The CLI is the agent contract: JSON by default, `--human` to show the user.
 
 - Session start: run `context` to see active goals and `list` for the hierarchy. State lives in `BTASK_DB` (default `~/.btask/btask.db`, shared across repos).
-- Larger goal (a spec, a ticket batch): `create` a goal first, or attach to a matching open goal instead of duplicating it.
+- Larger goal (a spec, a ticket batch): `create` a goal first, or attach to a matching open goal instead of duplicating it. If no goal fits, create one inferred from the context rather than leaving sub-tasks parentless.
 - One sub-task per unit of work (`create --parent <goal-id>`) — create it *before* starting the work; if you forgot, create it as soon as you notice rather than skipping it. Set it `in_progress` when starting and `finished` when done. Never leave a task `in_progress` at session end.
 - Finishing a goal (`complete --summary`) writes the review artifact and wipes its sub-tasks — pass a real summary of what was done.
