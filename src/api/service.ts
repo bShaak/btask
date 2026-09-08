@@ -201,7 +201,7 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
       }
       const met = args.completionCount >= Math.max(1, args.goal);
       const ORDER: Record<Status, number> = { todo: 0, in_progress: 1, finished: 2 };
-      const next: Status = met ? "finished" : "in_progress";
+      const next: Status = met ? "finished" : args.completionCount > 0 ? "in_progress" : "todo";
       if (ORDER[next] as number > (ORDER[task.status] as number)) {
         return this.setStatus(task.id, next, actor);
       }

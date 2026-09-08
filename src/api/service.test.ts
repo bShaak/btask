@@ -256,6 +256,18 @@ describe("task service", () => {
     expect(events.every((e) => e.actor === "habit-agent")).toBe(true);
   });
 
+  test("leaves untouched habits as todo", () => {
+    const svc = createService(":memory:");
+    const task = svc.recordHabitCompletion({
+      externalId: "habitui:1",
+      title: "Stretch",
+      date: "2026-09-08",
+      completionCount: 0,
+      goal: 1,
+    });
+    expect(task.status).toBe("todo");
+  });
+
   test("rejects habit pushes without identity", () => {
     const svc = createService(":memory:");
     expect(() =>
