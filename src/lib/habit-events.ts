@@ -15,7 +15,12 @@ export function habituiBaseUrl(): string {
 
 export function habituiEventsUrl(base: string = habituiBaseUrl()): string {
   const trimmed = base.replace(/\/+$/, "");
-  return `${trimmed.replace(/^http/, "ws")}/api/v1/events`;
+  const wsBase = trimmed.startsWith("https://")
+    ? `wss://${trimmed.slice("https://".length)}`
+    : trimmed.startsWith("http://")
+      ? `ws://${trimmed.slice("http://".length)}`
+      : trimmed;
+  return `${wsBase}/api/v1/events`;
 }
 
 export function parseHabitEvent(raw: string): HabitCompletedEvent | null {

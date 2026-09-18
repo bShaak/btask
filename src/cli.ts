@@ -33,6 +33,10 @@ function flagValue(args: string[], ...names: string[]): string | undefined {
   return undefined;
 }
 
+function resolveActor(args: string[]): string | undefined {
+  return flagValue(args, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined;
+}
+
 function renderHuman(nodes: TaskNode[], depth = 0): string[] {
   const lines: string[] = [];
   for (const n of nodes) {
@@ -114,7 +118,7 @@ export async function run(argv: string[]): Promise<void> {
         notes: flagValue(rest, "--notes"),
         habit: hasFlag(rest, "--habit"),
         project: flagValue(rest, "--project") ?? (parentId ? undefined : detectProject()),
-        actor: flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"],
+        actor: resolveActor(rest),
         externalId: flagValue(rest, "--external-id"),
       });
       if (human) console.log(`[ ] ${task.title} (${task.id.slice(0, 8)})`);
@@ -125,14 +129,14 @@ export async function run(argv: string[]): Promise<void> {
       const task = await client.update(id, {
         title: flagValue(rest, "--title"),
         notes: flagValue(rest, "--notes"),
-        actor: flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined,
+        actor: resolveActor(rest),
       });
       if (human) console.log(renderTaskHuman(task));
       else console.log(JSON.stringify(task, null, 2));
     } else if (cmd === "delete") {
       const [id] = rest.filter((a) => !a.startsWith("-"));
       if (!id) throw new Error(usage());
-      await client.remove(id, flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined);
+      await client.remove(id, resolveActor(rest));
       if (human) console.log(`deleted ${id.slice(0, 8)}`);
       else console.log(JSON.stringify({ deleted: id }));
     } else if (cmd === "complete") {
@@ -141,7 +145,7 @@ export async function run(argv: string[]): Promise<void> {
       const task = await client.complete(
         id,
         flagValue(rest, "--summary"),
-        flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined
+        resolveActor(rest)
       );
       if (human) console.log(`[x] ${task.title} (${task.id.slice(0, 8)})`);
       else console.log(JSON.stringify(task, null, 2));
@@ -152,14 +156,14 @@ export async function run(argv: string[]): Promise<void> {
       const task = await client.setHabit(
         id,
         value === "on",
-        flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined
+        resolveActor(rest)
       );
       if (human) console.log(renderTaskHuman(task));
       else console.log(JSON.stringify(task, null, 2));
     } else if (cmd === "archive") {
       const [id] = rest.filter((a) => !a.startsWith("-"));
       if (!id) throw new Error(usage());
-      const task = await client.setArchived(id, !hasFlag(rest, "--off"), flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined);
+      const task = await client.setArchived(id, !hasFlag(rest, "--off"), resolveActor(rest));
       if (human) console.log(renderTaskHuman(task));
       else console.log(JSON.stringify(task, null, 2));
     } else if (cmd === "habits") {
@@ -190,7 +194,7 @@ export async function run(argv: string[]): Promise<void> {
       } else if (rest[0] === "sync") {
         const result = await client.syncHabits(
           flagValue(rest, "--date"),
-          flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined
+          resolveActor(rest)
         );
         if (human) {
           console.log(
@@ -212,7 +216,7 @@ export async function run(argv: string[]): Promise<void> {
           date,
           completionCount: count,
           goal,
-          actor: flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined,
+          actor: resolveActor(rest),
         });
         if (human) console.log(renderTaskHuman(task));
         else console.log(JSON.stringify(task, null, 2));
@@ -261,7 +265,7 @@ export async function run(argv: string[]): Promise<void> {
       const task = await client.setStatus(
         id,
         status as "todo" | "in_progress" | "finished",
-        flagValue(rest, "--actor") ?? process.env["BTASK_ACTOR"] ?? undefined
+        resolveActor(rest)
       );
       if (human) console.log(`${task.status} ${task.title} (${task.id.slice(0, 8)})`);
       else console.log(JSON.stringify(task, null, 2));

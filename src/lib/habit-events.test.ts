@@ -22,6 +22,7 @@ describe("habit-events", () => {
   test("derives the websocket url from the base", () => {
     expect(habituiEventsUrl("http://127.0.0.1:8080")).toBe("ws://127.0.0.1:8080/api/v1/events");
     expect(habituiEventsUrl("http://127.0.0.1:8080/")).toBe("ws://127.0.0.1:8080/api/v1/events");
+    expect(habituiEventsUrl("https://example.com/")).toBe("wss://example.com/api/v1/events");
     withEnv({ HABITUI_URL: "http://127.0.0.1:9999" }, () => {
       expect(habituiEventsUrl()).toBe("ws://127.0.0.1:9999/api/v1/events");
     });
