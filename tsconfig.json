@@ -26,5 +26,9 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  // opencode/ holds OpenCode plugin source: it resolves @opencode-ai/plugin
+  // from the OpenCode config dir, not this repo. Validate it with
+  // `bun build opencode/btask-enforce.ts --external @opencode-ai/plugin`.
+  "exclude": ["opencode", "node_modules"]
 }

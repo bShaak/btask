@@ -43,35 +43,17 @@ By default, tasks live in `~/.btask/btask.db`, shared across repositories for yo
 
 ### Load the shared lifecycle contract in OpenCode
 
-Create `~/.agents/btask-contract.md` (create `~/.agents` first if needed) with these instructions:
+From this checkout, run the installer (safe to re-run; it backs up anything it replaces):
 
-```markdown
-# btask lifecycle contract
-
-Track multi-step work in btask; simple questions and greetings need no tasks.
-
-1. Before work, run `btask context` and `btask list`. Reuse a matching open goal in the correct project, or create one with `btask create "<goal>"`.
-2. Before each unit of work, run `btask create "<task>" --parent <goal-id>`. Retain full returned IDs in session context, delegation prompts, and handoffs. Delegates reuse assigned tasks.
-3. Start with `btask status <task-id> in_progress`. Record scope changes, blockers, and next steps using `btask update <task-id> --notes "<context>"`, preserving useful existing notes.
-4. Verify before `btask status <task-id> finished`. For code, run applicable tests, lint, and typecheck; for other work, check agreed acceptance criteria. Record actual results and unavailable or failing checks.
-5. Before ending a turn, leave completed tasks finished; preserve recovery notes and set unfinished tasks to `todo`. Questions, cancellation, failed checks, and idle sessions are not completion. On resuming, inspect assigned tasks and actual deliverables. Only reconcile this session's tasks, not another session's active work.
-6. Only the goal's completion owner runs `btask complete <goal-id> --summary "<deliverables, verification, limitations>"`, after all agreed work is verified. This writes a review artifact and deletes subtasks. Delegates finish only assigned subtasks.
-
-Use default JSON for automation and `--human` for display. Check exit status, parse JSON, and retain IDs. After uncertain mutations, reconcile with `btask get <id>` or `btask list --all` before retrying. Use a stable `--external-id` when a runner supplies one, but do not assume it guarantees atomic deduplication. Report tracking failures and preserve recovery context instead of claiming success.
-
-These instructions guide behavior; they are not a runner-enforced completion gate.
+```sh
+make install
 ```
 
-Add the file to `~/.config/opencode/opencode.jsonc`, using your actual absolute home path. Merge into existing settings and preserve any other instruction entries:
+(`make install` runs `scripts/install-agent-integration.sh`; either entry point works.)
 
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "instructions": ["/home/YOUR_USER/.agents/btask-contract.md"]
-}
-```
+It symlinks `contract/btask-contract.md` to `~/.agents/btask-contract.md` and `opencode/btask-enforce.ts` to `~/.config/opencode/plugins/btask-enforce.ts`, then registers the contract in `~/.config/opencode/opencode.jsonc` (`instructions`, resolved against your `$HOME`, existing entries preserved). Symlinks keep both live: pulling this repo updates the contract and plugin with no reinstall step. If your `opencode.jsonc` contains comments the script cannot merge it safely and prints the entry to add by hand instead.
 
-This loads the contract globally across OpenCode projects. Quit and restart OpenCode after changing the configuration. Agents launched outside zsh must inherit a PATH containing `~/.local/bin` or use the wrapper's absolute path.
+The contract loads globally across OpenCode projects. The plugin re-injects a short lifecycle reminder into the system prompt every turn (survives compaction) and warns on session idle when `in_progress` tasks are left unreconciled. Quit and restart OpenCode after changing the configuration. Agents launched outside zsh must inherit a PATH containing `~/.local/bin` or use the wrapper's absolute path.
 
 ### Load the shared contract in other harnesses
 
