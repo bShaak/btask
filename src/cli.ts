@@ -47,6 +47,35 @@ function renderHuman(nodes: TaskNode[], depth = 0): string[] {
   return lines;
 }
 
+function projectLabel(project: string | null): string {
+  return project ?? "(no project)";
+}
+
+function sortProjectLabels(a: string | null, b: string | null): number {
+  if (a === b) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return a.localeCompare(b);
+}
+
+function renderTreeHuman(nodes: TaskNode[]): string[] {
+  const groups = new Map<string | null, TaskNode[]>();
+  for (const n of nodes) {
+    const key = n.task.project ?? null;
+    const group = groups.get(key);
+    if (group) group.push(n);
+    else groups.set(key, [n]);
+  }
+  const keys = [...groups.keys()].sort(sortProjectLabels);
+  const lines: string[] = [];
+  keys.forEach((key, index) => {
+    if (index > 0) lines.push("");
+    lines.push(`## ${projectLabel(key)}`);
+    lines.push(...renderHuman(groups.get(key) ?? []));
+  });
+  return lines;
+}
+
 function renderTaskHuman(task: Task): string {
   const mark = task.status === "finished" ? "[x]" : task.status === "in_progress" ? "[~]" : "[ ]";
   const notes = task.notes ? `\n  notes: ${task.notes}` : "";
@@ -59,11 +88,27 @@ function renderRemindersHuman(reminders: HabitReminder[]): string[] {
   return reminders.map((r) => `${r.title} (${r.completionCount}/${r.goal} today)`);
 }
 
+function renderContextLine(t: Task): string {
+  const parent = t.parentId ? ` parent=${t.parentId.slice(0, 8)}` : "";
+  return `${t.id.slice(0, 8)} [${t.status}] ${t.title}${parent}`;
+}
+
 function renderContextHuman(tasks: Task[]): string[] {
-  return tasks.map((t) => {
-    const parent = t.parentId ? ` parent=${t.parentId.slice(0, 8)}` : "";
-    return `${t.id.slice(0, 8)} [${t.status}] ${t.title}${parent}`;
+  const groups = new Map<string | null, Task[]>();
+  for (const t of tasks) {
+    const key = t.project ?? null;
+    const group = groups.get(key);
+    if (group) group.push(t);
+    else groups.set(key, [t]);
+  }
+  const keys = [...groups.keys()].sort(sortProjectLabels);
+  const lines: string[] = [];
+  keys.forEach((key, index) => {
+    if (index > 0) lines.push("");
+    lines.push(`## ${projectLabel(key)}`);
+    for (const t of groups.get(key) ?? []) lines.push(renderContextLine(t));
   });
+  return lines;
 }
 
 function usage(): string {
@@ -99,7 +144,7 @@ export async function run(argv: string[]): Promise<void> {
       const project = flagValue(rest, "--project");
       const archived = hasFlag(rest, "--all") ? "all" : hasFlag(rest, "--archived") ? "archived" : undefined;
       const tree = svc.list({ ...(project === undefined ? {} : { project }), ...(archived === undefined ? {} : { archived }) });
-      if (human) console.log(renderHuman(tree).join("\n"));
+      if (human) console.log(renderTreeHuman(tree).join("\n"));
       else console.log(JSON.stringify(tree, null, 2));
     } else if (cmd === "get") {
       const [id] = rest.filter((a) => !a.startsWith("-"));

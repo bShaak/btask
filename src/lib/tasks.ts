@@ -43,6 +43,13 @@ const STATUSES: ReadonlySet<string> = new Set(["todo", "in_progress", "finished"
 
 export function openStore(path: string): TaskStore {
   const db = new Database(path, { create: true });
+  // The TUI polls listAll() every 500ms while CLI invocations write from
+  // separate processes. WAL lets readers proceed during writes and
+  // busy_timeout makes transient locks wait instead of throwing
+  // SQLITE_BUSY ("database is locked").
+  db.query(`PRAGMA journal_mode = WAL`).get();
+  db.query(`PRAGMA busy_timeout = 5000`).get();
+  db.query(`PRAGMA synchronous = NORMAL`).get();
   db.run(
     `CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,

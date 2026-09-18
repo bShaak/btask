@@ -58,12 +58,17 @@ describe("task service", () => {
     expect(svc.list()).toEqual([]);
   });
 
-  test("context dumps every task with parent links", () => {
+  test("context dumps active tasks with parent links, excluding archived", () => {
     const svc = createService(":memory:");
     const goal = svc.create({ title: "Ship" });
     const sub = svc.create({ title: "Store", parentId: goal.id });
+    const old = svc.create({ title: "Old" });
+    const orphan = svc.create({ title: "Orphan", parentId: old.id });
+    svc.setArchived(old.id, true);
     const ctx = svc.context();
-    expect(ctx.map((t) => t.id).sort()).toEqual([goal.id, sub.id].sort());
+    const ids = ctx.map((t) => t.id).sort();
+    expect(ids).toEqual([goal.id, sub.id].sort());
+    expect(ids).not.toContain(orphan.id);
     expect(ctx.find((t) => t.id === sub.id)?.parentId).toBe(goal.id);
   });
 
@@ -276,15 +281,33 @@ describe("task service", () => {
     expect(() => svc.setArchived("nope", true)).toThrow();
   });
 
-  test("archiving a goal hides its subtree and unarchiving restores it", () => {
+  test("archiving a goal cascades to its subtree and unarchiving restores it", () => {
     const svc = createService(":memory:");
     const goal = svc.create({ title: "Ship" });
-    svc.create({ title: "Store", parentId: goal.id });
+    const sub = svc.create({ title: "Store", parentId: goal.id });
     svc.setArchived(goal.id, true);
+    expect(svc.get(goal.id)?.archived).toBe(true);
+    expect(svc.get(sub.id)?.archived).toBe(true);
     expect(svc.list()).toEqual([]);
     expect(svc.list({ archived: "all" })[0]?.children.length).toBe(1);
+    expect(svc.context()).toEqual([]);
     svc.setArchived(goal.id, false);
+    expect(svc.get(goal.id)?.archived).toBe(false);
+    expect(svc.get(sub.id)?.archived).toBe(false);
     expect(svc.list()[0]?.children.length).toBe(1);
+  });
+
+  test("archiving a sub-task cascades to its descendants only", () => {
+    const svc = createService(":memory:");
+    const goal = svc.create({ title: "Ship" });
+    const sub = svc.create({ title: "Store", parentId: goal.id });
+    const leaf = svc.create({ title: "Shelf", parentId: sub.id });
+    const sibling = svc.create({ title: "Docs", parentId: goal.id });
+    svc.setArchived(sub.id, true);
+    expect(svc.get(sub.id)?.archived).toBe(true);
+    expect(svc.get(leaf.id)?.archived).toBe(true);
+    expect(svc.get(goal.id)?.archived).toBe(false);
+    expect(svc.get(sibling.id)?.archived).toBe(false);
   });
 
   test("completing an archived task keeps the marker and emits with actor", () => {

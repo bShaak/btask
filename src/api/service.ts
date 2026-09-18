@@ -95,6 +95,11 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
     return found;
   }
 
+  function archiveSubtree(rootId: string, archived: boolean): void {
+    store.setArchived(rootId, archived);
+    for (const target of collectSubtree(rootId)) store.setArchived(target, archived);
+  }
+
   function pushHabitCompletion(args: HabitCompletion): Task {
     if (!args.externalId) throw new Error("externalId is required");
     const title = args.title.trim();
@@ -187,7 +192,7 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
         !task.archived &&
         task.status !== "finished"
       ) {
-        store.setArchived(task.id, true);
+        archiveSubtree(task.id, true);
         emit("archived", task.id, actor);
         archived.push(task.id);
       }
@@ -281,7 +286,16 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
       return finished;
     },
     context() {
-      return store.listAll();
+      const all = store.listAll();
+      const byId = new Map(all.map((t) => [t.id, t]));
+      return all.filter((t) => {
+        let current: Task | undefined = t;
+        while (current) {
+          if (current.archived) return false;
+          current = current.parentId ? byId.get(current.parentId) : undefined;
+        }
+        return true;
+      });
     },
     setHabit(id, habit, actor = null) {
       const existing = store.get(id);
@@ -293,7 +307,8 @@ export function createService(path: string, options: ServiceOptions = {}): Servi
     setArchived(id, archived, actor = null) {
       const existing = store.get(id);
       if (!existing) throw new Error(`task not found: ${id}`);
-      const next = store.setArchived(id, archived) as Task;
+      archiveSubtree(id, archived);
+      const next = store.get(id) as Task;
       emit("archived", id, actor);
       return next;
     },
